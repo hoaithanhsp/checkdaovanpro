@@ -148,18 +148,16 @@ const findAndReplaceInDocument = (
     replacementText: string
 ): { result: string; replaced: boolean } => {
 
-    // Thử tìm với đoạn text ngắn hơn nếu đoạn gốc quá dài (> 100 ký tự)
+    // QUAN TRỌNG: Chỉ cắt ngắn text để TÌM KIẾM, KHÔNG cắt ngắn replacementText
     let searchText = originalText;
-    let replaceText = replacementText;
 
-    // Nếu đoạn quá dài, chỉ lấy 50 ký tự đầu để tìm
+    // Nếu đoạn gốc quá dài (> 100 ký tự), chỉ lấy phần đầu để tìm kiếm
+    // NHƯNG vẫn thay thế với TOÀN BỘ replacementText
     if (originalText.length > 100) {
-        // Tìm vị trí khoảng trắng gần nhất sau 50 ký tự
         const cutPoint = originalText.indexOf(' ', 50);
         if (cutPoint > 0 && cutPoint < 100) {
             searchText = originalText.substring(0, cutPoint);
-            replaceText = replacementText.substring(0, Math.min(replacementText.length, cutPoint + 50));
-            console.log(` Đoạn dài - chỉ tìm: "${searchText.substring(0, 40)}..."`);
+            console.log(`📝 Đoạn dài - chỉ tìm: "${searchText.substring(0, 40)}...", thay thế đầy đủ ${replacementText.length} ký tự`);
         }
     }
 
@@ -176,10 +174,11 @@ const findAndReplaceInDocument = (
         const element = match[0];
 
         // Thử thay thế trong element này
+        // QUAN TRỌNG: Dùng searchText để tìm, nhưng replacementText ĐẦY ĐỦ để thay thế
         const { result, replaced: wasReplaced } = replaceTextInParagraph(
             element,
             searchText,
-            replaceText
+            replacementText  // TOÀN BỘ nội dung thay thế, không cắt ngắn
         );
 
         if (wasReplaced) {
@@ -201,7 +200,7 @@ const findAndReplaceInDocument = (
             const { result, replaced: wasReplaced } = replaceTextInParagraph(
                 element,
                 shortSearch,
-                replacementText.substring(0, 50)
+                replacementText  // TOÀN BỘ nội dung thay thế, không cắt ngắn
             );
 
             if (wasReplaced) {
