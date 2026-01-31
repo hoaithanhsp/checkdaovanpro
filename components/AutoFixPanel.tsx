@@ -54,9 +54,50 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
 
     const handleCopy = async () => {
         if (result?.fixedContent) {
-            await navigator.clipboard.writeText(result.fixedContent);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+            try {
+                // Chuyển đổi thẻ <red> thành HTML với màu đỏ
+                const htmlContent = result.fixedContent
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/&lt;red&gt;/g, '<span style="color: red;">')
+                    .replace(/&lt;\/red&gt;/g, '</span>')
+                    .replace(/\n/g, '<br>');
+
+                const htmlBlob = new Blob([`
+                    <html>
+                    <body>
+                    <div style="font-family: Times New Roman, serif; font-size: 13pt;">
+                    ${htmlContent}
+                    </div>
+                    </body>
+                    </html>
+                `], { type: 'text/html' });
+
+                // Cũng copy plain text (không có thẻ <red>)
+                const plainText = result.fixedContent
+                    .replace(/<red>/g, '')
+                    .replace(/<\/red>/g, '');
+                const textBlob = new Blob([plainText], { type: 'text/plain' });
+
+                // Sử dụng ClipboardItem để copy cả HTML và plain text
+                const clipboardItem = new ClipboardItem({
+                    'text/html': htmlBlob,
+                    'text/plain': textBlob
+                });
+
+                await navigator.clipboard.write([clipboardItem]);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            } catch (err) {
+                // Fallback: chỉ copy plain text nếu ClipboardItem không được hỗ trợ
+                console.warn('ClipboardItem API không hỗ trợ, dùng fallback:', err);
+                const plainText = result.fixedContent
+                    .replace(/<red>/g, '')
+                    .replace(/<\/red>/g, '');
+                await navigator.clipboard.writeText(plainText);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            }
         }
     };
 
