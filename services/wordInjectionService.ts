@@ -346,8 +346,8 @@ export const injectFixedContentToDocx = async (
                 const runs = parts.map(part => {
                     const escaped = escapeXml(part.text);
                     if (part.isRed) {
-                        // Chữ đỏ, in đậm, có highlight vàng
-                        return `<w:r><w:rPr><w:color w:val="FF0000"/><w:b/><w:highlight w:val="yellow"/></w:rPr><w:t xml:space="preserve">${escaped}</w:t></w:r>`;
+                        // Chỉ chữ đỏ, không in đậm, không highlight
+                        return `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escaped}</w:t></w:r>`;
                     }
                     return `<w:r><w:t xml:space="preserve">${escaped}</w:t></w:r>`;
                 }).join('');
