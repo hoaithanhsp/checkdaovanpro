@@ -396,15 +396,25 @@ ${analysisResult.plagiarismSegments.map((p, i) => `${i + 1}. Đoạn: "${p.segme
 ${analysisResult.scoreDetails.map(s => `- ${s.category}: ${s.weakness}`).join('\n')}
 
 ## NGUYÊN TẮC SỬA:
-1. **Chính tả**: Sửa đúng theo danh sách
-2. **Đạo văn**: Viết lại hoàn toàn với văn phong mới, áp dụng kỹ thuật PARAPHRASE:
+1. **Chính tả tiếng Việt**: Sửa theo các quy tắc:
+   - Lỗi sa/xa, s/x: "xa cách" vs "sa sút", "sung sướng" vs "xung đột"
+   - Lỗi tr/ch: "trong" vs "chong chóng", "trí tuệ" vs "chi tiết"
+   - Lỗi d/gi/r: "giáo" vs "dao", "rộng" vs "dòng"
+   - Lỗi hỏi/ngã: "mỹ" vs "mỉ", "sửa" vs "sủa", "kỹ năng" vs "kỉ niệm"
+   - Lỗi dấu thanh đặt sai vị trí: "hoá" → "hóa", "thuỷ" → "thủy"
+   - Lỗi thiếu/thừa ký tự: "ngườii" → "người", "đạo tao" → "đào tạo"
+2. **Chuẩn hóa viết hoa**:
+   - Viết hoa đầu câu sau dấu chấm
+   - "KHông" → "Không", "BÁO CÁO" → "Báo cáo" (trừ tiêu đề)
+   - GIỮ NGUYÊN: THPT, UBND, SKKN, GV, HS (từ viết tắt)
+3. **Đạo văn**: Viết lại hoàn toàn với văn phong mới, áp dụng kỹ thuật PARAPHRASE:
    - Thay đổi từ vựng (sử dụng từ đồng nghĩa)
    - Đổi cấu trúc câu (chủ động ↔ bị động)
    - Thêm trạng từ/tính từ học thuật
    - ⚠️ GIỮ NGUYÊN: "học sinh" (KHÔNG sửa thành "người học"), "giáo viên" (KHÔNG sửa thành "nhà giáo")
-3. **Cấu trúc**: Tăng độ phức tạp câu, thêm mệnh đề
-4. **Từ vựng**: Bổ sung từ chuyên ngành (hiện thực hóa, tối ưu hóa, cá nhân hóa...)
-5. **Số liệu**: Nếu thấy số tròn (50%, 60%), thay bằng số lẻ (47.3%, 62.8%)
+4. **Cấu trúc**: Tăng độ phức tạp câu, thêm mệnh đề
+5. **Từ vựng**: Bổ sung từ chuyên ngành (hiện thực hóa, tối ưu hóa, cá nhân hóa...)
+6. **Số liệu**: Nếu thấy số tròn (50%, 60%), thay bằng số lẻ (47.3%, 62.8%)
 
 ## NỘI DUNG SKKN GỐC:
 ${originalContent}

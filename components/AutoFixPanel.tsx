@@ -3,6 +3,7 @@ import { X, Wand2, Check, FileText, AlertCircle, Copy, Download, ChevronDown, Ch
 import { autoFixSKKN, AutoFixResult } from '../services/geminiService';
 import { AnalysisResult, OriginalDocxFile } from '../types';
 import { injectFixesToDocx, replaceFullContent, ReplacementSegment, injectFixedContentToDocx } from '../services/wordInjectionService';
+import { normalizeVietnameseText } from '../services/textNormalizerService';
 import FileSaver from 'file-saver';
 
 interface AutoFixPanelProps {
@@ -26,13 +27,19 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
     const [error, setError] = useState<string | null>(null);
     const [showChanges, setShowChanges] = useState(true);
     const [copied, setCopied] = useState(false);
+    const [normalizeText, setNormalizeText] = useState(true); // Chuẩn hóa văn bản trước khi sửa
 
     const handleAutoFix = async () => {
         setIsProcessing(true);
         setError(null);
 
         try {
-            const fixResult = await autoFixSKKN(originalContent, {
+            // Chuẩn hóa văn bản trước nếu option được bật
+            const contentToFix = normalizeText
+                ? normalizeVietnameseText(originalContent)
+                : originalContent;
+
+            const fixResult = await autoFixSKKN(contentToFix, {
                 spellingErrors: analysisResult.spellingErrors,
                 plagiarismSegments: analysisResult.plagiarismSegments,
                 scoreDetails: analysisResult.scoreDetails
@@ -158,6 +165,21 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
                                     Nâng cấp từ vựng
                                 </span>
                             </div>
+
+                            {/* Option chuẩn hóa văn bản */}
+                            <div className="flex items-center justify-center gap-2 mb-6">
+                                <input
+                                    type="checkbox"
+                                    id="normalizeText"
+                                    checked={normalizeText}
+                                    onChange={(e) => setNormalizeText(e.target.checked)}
+                                    className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                                />
+                                <label htmlFor="normalizeText" className="text-sm text-gray-600">
+                                    Chuẩn hóa văn bản trước khi sửa (sửa lỗi viết hoa, bullet points)
+                                </label>
+                            </div>
+
                             <button
                                 onClick={handleAutoFix}
                                 className="px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-full hover:shadow-lg transform hover:scale-105 transition-all flex items-center gap-3 mx-auto"
