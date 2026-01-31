@@ -1,0 +1,56 @@
+/**
+ * VIP Accounts Data
+ * Danh sách tài khoản VIP - Mỗi account 1 dòng để dễ thêm/sửa
+ * 
+ * Cấu trúc: { username: string, password: string, displayName?: string }
+ */
+
+export interface VIPAccount {
+    username: string;
+    password: string;
+    displayName?: string;
+}
+
+// ============ DANH SÁCH TÀI KHOẢN VIP ============
+// Thêm mỗi tài khoản 1 dòng theo format: { username: "...", password: "...", displayName: "..." },
+
+export const VIP_ACCOUNTS: VIPAccount[] = [
+    { username: "admin", password: "Hoaithanh@2", displayName: "Quản trị viên" },
+    // Thêm tài khoản mới ở đây, mỗi dòng 1 account:
+    // { username: "teacher1", password: "123456", displayName: "Thầy Nguyễn Văn A" },
+    // { username: "teacher2", password: "abcdef", displayName: "Cô Trần Thị B" },
+];
+
+// ============ HÀM XÁC THỰC ============
+
+export const authenticateUser = (username: string, password: string): VIPAccount | null => {
+    const account = VIP_ACCOUNTS.find(
+        acc => acc.username === username && acc.password === password
+    );
+    return account || null;
+};
+
+// Lưu trạng thái đăng nhập vào localStorage
+export const saveLoginState = (account: VIPAccount) => {
+    localStorage.setItem('vip_user', JSON.stringify({
+        username: account.username,
+        displayName: account.displayName || account.username,
+        loginTime: new Date().toISOString()
+    }));
+};
+
+export const getLoggedInUser = (): { username: string; displayName: string } | null => {
+    const data = localStorage.getItem('vip_user');
+    if (data) {
+        try {
+            return JSON.parse(data);
+        } catch {
+            return null;
+        }
+    }
+    return null;
+};
+
+export const logout = () => {
+    localStorage.removeItem('vip_user');
+};

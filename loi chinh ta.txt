@@ -1,0 +1,345 @@
+/**
+ * AI-Powered Context-Aware Spell Checker for SKKN
+ * Sử dụng Gemini AI để phân tích ngữ cảnh và sửa lỗi chính tả thông minh
+ */
+
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+// ==================== CONFIGURATION ====================
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'YOUR_API_KEY_HERE';
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+
+// Danh sách từ viết tắt phổ biến (whitelist cứng)
+const WHITELIST_ACRONYMS = new Set([
+    'KHBG', 'ĐGTX', 'NCBH', 'HSG', 'CSDL', 'KTTX', 'THPT',
+    'GDĐT', 'UBND', 'HĐND', 'BGD', 'SỞ', 'PHÒNG', 'THCS', 'TP', 'VN', 'SGK',
+    'GV', 'HS', 'BGH', 'CMHS', 'CNTT', 'SKKN', 'PPCT', 'KHGD', 'KHDH',
+    'NQ', 'TW', 'BGDĐT', 'ĐSVN', 'COVID', 'WHO', 'UNESCO', 'ASEAN'
+]);
+
+// ==================== TYPES ====================
+
+interface SKKNContext {
+    title: string;           // Tên đề tài SKKN
+    subject: string;         // Môn học (Toán, Văn, Hóa...)
+    grade: string;           // Cấp học (THCS, THPT...)
+    keywords: string[];      // Từ khóa chính
+    fullText: string;        // Toàn bộ nội dung (để AI phân tích)
+}
+
+interface CorrectionDecision {
+    original: string;        // Từ gốc
+    corrected: string;       // Từ đã sửa (hoặc giữ nguyên)
+    shouldCorrect: boolean;  // Có nên sửa không?
+    reason: string;          // Lý do (tên riêng, thuật ngữ, lỗi thật...)
+}
+
+interface CorrectionCache {
+    [contextHash: string]: {
+        [word: string]: CorrectionDecision;
+    };
+}
+
+// ==================== CACHE ====================
+
+const correctionCache: CorrectionCache = {};
+
+const getContextHash = (context: SKKNContext): string => {
+    return `${context.subject}_${context.grade}_${context.title.substring(0, 20)}`;
+};
+
+// ==================== CONTEXT EXTRACTION ====================
+
+/**
+ * Trích xuất ngữ cảnh từ toàn bộ SKKN
+ */
+export const extractSKKNContext = (fullText: string): SKKNContext => {
+    const lines = fullText.split('
+').map(l => l.trim()).filter(Boolean);
+    
+    let title = 'Không xác định';
+    let subject = 'Chung';
+    let grade = 'THCS';
+    const keywords: string[] = [];
+
+    // Tìm tên đề tài (thường ở đầu hoặc có từ "Tên đề tài", "Đề tài")
+    for (let i = 0; i < Math.min(10, lines.length); i++) {
+        const line = lines[i];
+        if (line.length > 10 && line.length < 200) {
+            if (/^(TÊN ĐỀ TÀI|ĐỀ TÀI|SKKN)/i.test(line)) {
+                title = lines[i + 1] || line;
+                break;
+            }
+            if (i === 0 && line.length > 20) {
+                title = line;
+            }
+        }
+    }
+
+    // Phát hiện môn học
+    const subjectPatterns = [
+        { pattern: /toán\s*học|môn\s*toán|giải\s*toán/i, name: 'Toán' },
+        { pattern: /ngữ\s*văn|văn\s*học|môn\s*văn/i, name: 'Văn' },
+        { pattern: /hóa\s*học|môn\s*hóa/i, name: 'Hóa' },
+        { pattern: /vật\s*lý|môn\s*lý/i, name: 'Lý' },
+        { pattern: /sinh\s*học|môn\s*sinh/i, name: 'Sinh' },
+        { pattern: /lịch\s*sử|môn\s*sử/i, name: 'Sử' },
+        { pattern: /địa\s*lý|môn\s*địa/i, name: 'Địa' },
+        { pattern: /tiếng\s*anh|english/i, name: 'Tiếng Anh' },
+        { pattern: /giáo\s*dục\s*công\s*dân|gdcd/i, name: 'GDCD' },
+        { pattern: /tin\s*học|công\s*nghệ\s*thông\s*tin/i, name: 'Tin học' }
+    ];
+
+    for (const { pattern, name } of subjectPatterns) {
+        if (pattern.test(fullText)) {
+            subject = name;
+            break;
+        }
+    }
+
+    // Phát hiện cấp học
+    if (/THPT|trung\s*học\s*phổ\s*thông|lớp\s*(10|11|12)/i.test(fullText)) {
+        grade = 'THPT';
+    } else if (/THCS|trung\s*học\s*cơ\s*sở|lớp\s*[6-9]/i.test(fullText)) {
+        grade = 'THCS';
+    } else if (/tiểu\s*học|lớp\s*[1-5]/i.test(fullText)) {
+        grade = 'Tiểu học';
+    }
+
+    // Trích xuất từ khóa (các từ viết hoa xuất hiện nhiều lần)
+    const wordFreq = new Map<string, number="">();
+    const words = fullText.match(/\b[A-ZÀ-Ỹ][a-zà-ỹ]{2,}\b/g) || [];
+    
+    words.forEach(word => {
+        if (word.length > 3 && !WHITELIST_ACRONYMS.has(word.toUpperCase())) {
+            wordFreq.set(word, (wordFreq.get(word) || 0) + 1);
+        }
+    });
+
+    // Lấy top 10 từ xuất hiện nhiều nhất
+    const sortedWords = Array.from(wordFreq.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([word]) => word);
+
+    keywords.push(...sortedWords);
+
+    return {
+        title,
+        subject,
+        grade,
+        keywords,
+        fullText: fullText.substring(0, 3000) // Giới hạn 3000 ký tự cho AI
+    };
+};
+
+// ==================== AI CORRECTION ====================
+
+/**
+ * Gọi AI để phân tích và quyết định sửa lỗi
+ */
+const getAICorrectionDecisions = async (
+    words: string[],
+    context: SKKNContext
+): Promise<correctiondecision[]> => {
+    
+    const prompt = `Bạn là chuyên gia sửa lỗi chính tả tiếng Việt cho văn bản Sáng kiến Kinh nghiệm (SKKN) giáo dục.
+
+**THÔNG TIN NGỮ CẢNH SKKN:**
+- Tên đề tài: ${context.title}
+- Môn học: ${context.subject}
+- Cấp học: ${context.grade}
+- Từ khóa chính: ${context.keywords.join(', ')}
+
+**ĐOẠN VĂN MẪU (để hiểu ngữ cảnh):**
+${context.fullText.substring(0, 500)}...
+
+**NHIỆM VỤ:**
+Phân tích danh sách các từ dưới đây và quyết định xem có nên sửa lỗi viết hoa hay không.
+
+**CÁC TỪ CẦN PHÂN TÍCH:**
+${words.map((w, i) => `${i + 1}. "${w}"`).join('
+')}
+
+**QUY TẮC QUYẾT ĐỊNH:**
+1. **GIỮ NGUYÊN** nếu là:
+   - Tên riêng của người, địa danh (VD: "Nguyễn Văn A", "Hà Nội")
+   - Thuật ngữ chuyên ngành của môn học (VD: "Pitago", "Newton", "Mendeleev")
+   - Tên phương pháp giảng dạy (VD: "Jigsaw", "Montessori")
+   - Từ viết hoa hợp lý trong ngữ cảnh
+
+2. **SỬA THÀNH CHỮ THƯỜNG** nếu là:
+   - Lỗi đánh máy (VD: "KHông" → "không", "NHững" → "những")
+   - Từ thường bị viết hoa nhầm (VD: "Các" → "các", "Những" → "những")
+   - Không phải tên riêng hay thuật ngữ
+
+**ĐỊNH DẠNG ĐẦU RA (JSON):**
+Trả về mảng JSON, mỗi phần tử có cấu trúc:
+{
+  "original": "từ gốc",
+  "corrected": "từ đã sửa (hoặc giữ nguyên)",
+  "shouldCorrect": true/false,
+  "reason": "lý do ngắn gọn"
+}
+
+**CHỈ TRẢ VỀ JSON, KHÔNG GIẢI THÍCH THÊM.**`;
+
+    try {
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text();
+        
+        // Parse JSON từ response
+        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) {
+            throw new Error('AI không trả về JSON hợp lệ');
+        }
+
+        const decisions: CorrectionDecision[] = JSON.parse(jsonMatch[0]);
+        return decisions;
+
+    } catch (error) {
+        console.error('❌ Lỗi khi gọi AI:', error);
+        
+        // Fallback: giữ nguyên tất cả
+        return words.map(word => ({
+            original: word,
+            corrected: word,
+            shouldCorrect: false,
+            reason: 'AI error - giữ nguyên an toàn'
+        }));
+    }
+};
+
+// ==================== MAIN CORRECTION FUNCTION ====================
+
+/**
+ * Sửa lỗi chính tả dựa vào ngữ cảnh SKKN
+ */
+export const correctSpellingWithContext = async (
+    text: string,
+    context: SKKNContext
+): Promise<string> => {
+    
+    if (!text.trim()) return text;
+
+    const contextHash = getContextHash(context);
+    
+    // Khởi tạo cache cho context này nếu chưa có
+    if (!correctionCache[contextHash]) {
+        correctionCache[contextHash] = {};
+    }
+
+    const lines = text.split('
+');
+    const correctedLines: string[] = [];
+
+    for (const line of lines) {
+        if (!line.trim()) {
+            correctedLines.push(line);
+            continue;
+        }
+
+        // Giữ lại indentation
+        const indentMatch = line.match(/^(\s+)/);
+        const indent = indentMatch ? indentMatch[1] : '';
+        const content = line.trim();
+
+        // Tìm tất cả các từ có vấn đề về viết hoa
+        const problematicWords: { word: string; index: number }[] = [];
+        const words = content.split(/\s+/);
+        
+        words.forEach((word, index) => {
+            const coreMatch = word.match(/[\wÀ-ỹ]+/);
+            if (!coreMatch) return;
+            
+            const coreWord = coreMatch[0];
+            
+            // Bỏ qua whitelist
+            if (WHITELIST_ACRONYMS.has(coreWord.toUpperCase())) return;
+            
+            // Phát hiện lỗi viết hoa
+            const hasCapitalIssue = 
+                /^[A-ZÀ-Ỹ]{2,}[a-zà-ỹ]+$/.test(coreWord) ||  // "KHông"
+                /^[A-ZÀ-Ỹ]{2,}$/.test(coreWord) ||            // "KHÔNG"
+                (/^[A-ZÀ-Ỹ][a-zà-ỹ]+$/.test(coreWord) && index > 0); // "Không" giữa câu
+            
+            if (hasCapitalIssue) {
+                problematicWords.push({ word: coreWord, index });
+            }
+        });
+
+        // Nếu không có từ nào có vấn đề, giữ nguyên
+        if (problematicWords.length === 0) {
+            correctedLines.push(line);
+            continue;
+        }
+
+        // Lọc các từ chưa có trong cache
+        const wordsToAnalyze = problematicWords
+            .filter(({ word }) => !correctionCache[contextHash][word])
+            .map(({ word }) => word);
+
+        // Gọi AI để phân tích (nếu có từ mới)
+        if (wordsToAnalyze.length > 0) {
+            const decisions = await getAICorrectionDecisions(wordsToAnalyze, context);
+            
+            // Lưu vào cache
+            decisions.forEach(decision => {
+                correctionCache[contextHash][decision.original] = decision;
+            });
+        }
+
+        // Áp dụng correction
+        let correctedContent = content;
+        
+        for (const { word } of problematicWords) {
+            const decision = correctionCache[contextHash][word];
+            
+            if (decision && decision.shouldCorrect) {
+                // Thay thế từ trong câu (giữ nguyên dấu câu xung quanh)
+                const regex = new RegExp(`\\b${word}\\b`, 'g');
+                correctedContent = correctedContent.replace(regex, decision.corrected);
+            }
+        }
+
+        correctedLines.push(indent + correctedContent);
+    }
+
+    return correctedLines.join('
+');
+};
+
+// ==================== FULL PIPELINE ====================
+
+/**
+ * Pipeline đầy đủ: Extract context → Correct spelling
+ */
+export const correctSKKNSpelling = async (fullText: string): Promise<string> => {
+    
+    console.log('🔍 Đang phân tích ngữ cảnh SKKN...');
+    const context = extractSKKNContext(fullText);
+    
+    console.log('📊 Ngữ cảnh phát hiện:', {
+        title: context.title,
+        subject: context.subject,
+        grade: context.grade,
+        keywords: context.keywords.slice(0, 5)
+    });
+
+    console.log('🤖 Đang sửa lỗi chính tả với AI...');
+    const correctedText = await correctSpellingWithContext(fullText, context);
+    
+    console.log('✅ Hoàn thành!');
+    return correctedText;
+};
+
+// ==================== EXPORT ====================
+
+export default {
+    extractSKKNContext,
+    correctSpellingWithContext,
+    correctSKKNSpelling
+};
+</string></string></correctiondecision[]></string,>

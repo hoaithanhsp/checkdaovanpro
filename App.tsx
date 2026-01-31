@@ -4,11 +4,13 @@ import ResultsDashboard from './components/ResultsDashboard';
 import HistoryPanel from './components/HistoryPanel';
 import ComparePanel from './components/ComparePanel';
 import ApiKeyModal, { getStoredApiKey, ApiKeySettingsButton } from './components/ApiKeyModal';
+import LoginPage from './components/LoginPage';
 import { SKKNInput, AnalysisResult, AnalysisStatus } from './types';
 import { analyzeSKKNWithGemini } from './services/geminiService';
 import { saveToHistory, HistoryItem } from './services/historyService';
+import { getLoggedInUser, logout, VIPAccount } from './data/accounts';
 import { useTheme } from './contexts/ThemeContext';
-import { ShieldCheck, BookOpen, History, Sun, Moon, GitCompare } from 'lucide-react';
+import { ShieldCheck, BookOpen, History, Sun, Moon, GitCompare, LogOut } from 'lucide-react';
 
 const App: React.FC = () => {
   const { isDark, toggleTheme } = useTheme();
@@ -20,16 +22,39 @@ const App: React.FC = () => {
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loggedInUser, setLoggedInUser] = useState<{ username: string; displayName: string } | null>(null);
   const currentInputRef = useRef<SKKNInput | null>(null);
 
-  // Kiểm tra API key khi load
+  // Kiểm tra đăng nhập và API key khi load
   useEffect(() => {
+    // Kiểm tra đăng nhập
+    const user = getLoggedInUser();
+    if (user) {
+      setIsLoggedIn(true);
+      setLoggedInUser(user);
+    }
+
     const key = getStoredApiKey();
     setHasApiKey(!!key);
-    if (!key) {
+    if (!key && user) {
       setShowApiKeyModal(true);
     }
   }, []);
+
+  const handleLoginSuccess = (account: VIPAccount) => {
+    setIsLoggedIn(true);
+    setLoggedInUser({
+      username: account.username,
+      displayName: account.displayName || account.username
+    });
+  };
+
+  const handleLogout = () => {
+    logout();
+    setIsLoggedIn(false);
+    setLoggedInUser(null);
+  };
 
   const handleApiKeySave = (_apiKey: string, _model: string) => {
     setHasApiKey(true);
@@ -65,6 +90,11 @@ const App: React.FC = () => {
     setStatus(AnalysisStatus.SUCCESS);
     setShowHistory(false);
   };
+
+  // Hiển thị LoginPage nếu chưa đăng nhập
+  if (!isLoggedIn) {
+    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+  }
 
   return (
     <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${isDark ? 'bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-800'}`}>
@@ -208,6 +238,15 @@ const App: React.FC = () => {
               <p className={`text-xs font-medium tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>TRỢ LÝ THẨM ĐỊNH SKKN</p>
             </div>
           </div>
+
+          {/* Thông báo chào mừng */}
+          {loggedInUser && (
+            <div className="hidden lg:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 rounded-xl border border-emerald-500/20">
+              <span className="text-xs text-emerald-600 dark:text-emerald-400">
+                🎉 Chào mừng quý thầy cô đến với <span className="font-bold">TRỢ LÝ THẨM ĐỊNH SKKN</span>
+              </span>
+            </div>
+          )}
           <div className={`flex items-center gap-2 text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
             <button
               onClick={toggleTheme}
@@ -242,6 +281,16 @@ const App: React.FC = () => {
               hasKey={hasApiKey}
             />
             <span className={`px-3 py-1 rounded-full text-xs font-bold ${isDark ? 'bg-blue-900 text-blue-300' : 'bg-blue-50 text-blue-700'}`}>v1.4</span>
+
+            {/* Nút Đăng xuất */}
+            <button
+              onClick={handleLogout}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors text-red-500 ${isDark ? 'hover:bg-red-900/30' : 'hover:bg-red-50'}`}
+              title="Đăng xuất"
+            >
+              <LogOut size={18} />
+              <span className="hidden sm:inline">Đăng xuất</span>
+            </button>
           </div>
         </div>
       </header>
