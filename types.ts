@@ -69,3 +69,39 @@ export interface AnalysisResult {
   developmentPlan: DevelopmentPlan;
   overallConclusion: string;
 }
+
+/**
+ * Kết quả phân tích tên đề tài SKKN
+ */
+export interface TitleAnalysisResult {
+  structure: {
+    action: string;      // Hành động (Ứng dụng, Thiết kế...)
+    tool: string;        // Công cụ (AI Gemini, Kahoot...)
+    subject: string;     // Môn học/Lĩnh vực
+    scope: string;       // Phạm vi (lớp, cấp học)
+    purpose: string;     // Mục đích
+  };
+  duplicateLevel: 'Cao' | 'Trung bình' | 'Thấp';
+  duplicateDetails: string;
+  scores: {
+    specificity: number;   // Độ cụ thể (max 25)
+    novelty: number;       // Tính mới (max 30)
+    feasibility: number;   // Tính khả thi (max 25)
+    clarity: number;       // Độ rõ ràng (max 20)
+    total: number;         // Tổng điểm (max 100)
+  };
+  scoreDetails: Array<{
+    category: string;
+    score: number;
+    maxScore: number;
+    reason: string;
+  }>;
+  problems: string[];
+  suggestions: Array<{
+    title: string;
+    strength: string;
+    predictedScore: number;
+  }>;
+  relatedTopics: string[];
+  overallVerdict: string;
+}

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, Wand2, Check, FileText, AlertCircle, Copy, Download, ChevronDown, ChevronUp, FileEdit } from 'lucide-react';
 import { autoFixSKKN, AutoFixResult } from '../services/geminiService';
 import { AnalysisResult, OriginalDocxFile } from '../types';
-import { injectFixesToDocx, replaceFullContent, ReplacementSegment } from '../services/wordInjectionService';
+import { injectFixesToDocx, replaceFullContent, ReplacementSegment, injectFixedContentToDocx } from '../services/wordInjectionService';
 import FileSaver from 'file-saver';
 
 interface AutoFixPanelProps {
@@ -54,29 +54,28 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
     };
 
     /**
-     * Xuất Word với XML Injection (giữ nguyên file gốc)
-     * Bảo toàn: OLE Objects (MathType), Hình ảnh, Bảng
+     * Xuất Word với XML Injection (giữ nguyên OLE Objects, hình ảnh, công thức)
+     * Chỉ thay thế các đoạn text cụ thể với màu đỏ
      */
     const handleExportWithInjection = async () => {
         if (!result || !originalDocx) return;
 
         setIsExporting(true);
         try {
-            // Chuyển đổi changes thành ReplacementSegment
-            const replacements: ReplacementSegment[] = result.changes.map(c => ({
-                original: c.original,
-                replacement: c.fixed,
-                type: c.type
-            }));
-
-            const blob = await injectFixesToDocx(originalDocx, replacements);
+            // Sử dụng XML Injection: truyền danh sách changes để tìm và thay thế text cụ thể
+            // Giữ nguyên tất cả cấu trúc gốc (OLE, hình ảnh, bảng, công thức MathType)
+            const blob = await injectFixedContentToDocx(
+                originalDocx,
+                result.fixedContent,
+                result.changes  // Truyền danh sách thay đổi cụ thể
+            );
             const newFileName = originalDocx.fileName.replace('.docx', '_DA_SUA.docx');
             FileSaver.saveAs(blob, newFileName);
 
             console.log('✓ Xuất thành công với XML Injection, giữ nguyên OLE objects');
         } catch (err: any) {
-            console.error('XML Injection thất bại:', err);
-            setError(`Không thể xuất với XML Injection: ${err.message}. Thử xuất file mới.`);
+            console.error('Xuất Word thất bại:', err);
+            setError(`Không thể xuất file Word: ${err.message}`);
         } finally {
             setIsExporting(false);
         }

@@ -1,7 +1,9 @@
 import React, { useState, ChangeEvent } from 'react';
-import { SKKNInput, OriginalDocxFile } from '../types';
-import { BookOpen, Target, GraduationCap, FileText, Sparkles, Upload, Type, AlertCircle } from 'lucide-react';
+import { SKKNInput, OriginalDocxFile, TitleAnalysisResult } from '../types';
+import { BookOpen, Target, GraduationCap, FileText, Sparkles, Upload, Type, AlertCircle, Search, Loader2 } from 'lucide-react';
 import FileUpload from './FileUpload';
+import TitleAnalysisPanel from './TitleAnalysisPanel';
+import { analyzeTitleSKKN } from '../services/geminiService';
 
 interface InputFormProps {
   onSubmit: (data: SKKNInput) => void;
@@ -20,6 +22,29 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, isLoading }) => {
   });
   const [inputMode, setInputMode] = useState<InputMode>('file');
   const [fileError, setFileError] = useState<string | null>(null);
+  const [isAnalyzingTitle, setIsAnalyzingTitle] = useState(false);
+  const [titleAnalysis, setTitleAnalysis] = useState<TitleAnalysisResult | null>(null);
+
+  const handleAnalyzeTitle = async () => {
+    if (!formData.title.trim()) {
+      alert('Vui lòng nhập tên đề tài trước khi phân tích.');
+      return;
+    }
+    setIsAnalyzingTitle(true);
+    try {
+      const result = await analyzeTitleSKKN(formData.title, formData.subject, formData.level);
+      setTitleAnalysis(result);
+    } catch (error: any) {
+      alert('Lỗi phân tích đề tài: ' + error.message);
+    } finally {
+      setIsAnalyzingTitle(false);
+    }
+  };
+
+  const handleSelectSuggestedTitle = (title: string) => {
+    setFormData(prev => ({ ...prev, title }));
+    setTitleAnalysis(null);
+  };
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -89,14 +114,32 @@ Qua áp dụng sáng kiến, chất lượng môn Lịch sử lớp 5A đã đư
             <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
               <FileText size={18} className="text-blue-600" /> Tên đề tài SKKN
             </label>
-            <input
-              type="text"
-              name="title"
-              value={formData.title}
-              onChange={handleChange}
-              placeholder="Ví dụ: Một số biện pháp giúp học sinh..."
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                name="title"
+                value={formData.title}
+                onChange={handleChange}
+                placeholder="Ví dụ: Một số biện pháp giúp học sinh..."
+                className="flex-1 px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              />
+              <button
+                type="button"
+                onClick={handleAnalyzeTitle}
+                disabled={isAnalyzingTitle || !formData.title.trim()}
+                className={`px-4 py-3 rounded-lg font-medium text-white flex items-center gap-2 transition-all ${isAnalyzingTitle || !formData.title.trim()
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-purple-600 hover:bg-purple-700 hover:shadow-lg'
+                  }`}
+                title="Phân tích tên đề tài"
+              >
+                {isAnalyzingTitle ? (
+                  <><Loader2 size={18} className="animate-spin" /> Đang phân tích...</>
+                ) : (
+                  <><Search size={18} /> Phân tích đề tài</>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Level */}
@@ -255,6 +298,15 @@ Qua áp dụng sáng kiến, chất lượng môn Lịch sử lớp 5A đã đư
           </button>
         </div>
       </form>
+
+      {/* Title Analysis Panel */}
+      {titleAnalysis && (
+        <TitleAnalysisPanel
+          result={titleAnalysis}
+          onClose={() => setTitleAnalysis(null)}
+          onSelectTitle={handleSelectSuggestedTitle}
+        />
+      )}
     </div>
   );
 };

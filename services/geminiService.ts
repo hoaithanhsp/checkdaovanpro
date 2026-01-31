@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { SKKNInput, AnalysisResult } from "../types";
+import { SKKNInput, AnalysisResult, TitleAnalysisResult } from "../types";
 
 const SYSTEM_INSTRUCTION = `
 Bạn là "SKKN Checker Pro" - Chuyên gia thẩm định Sáng kiến kinh nghiệm (SKKN) với 20 năm kinh nghiệm.
@@ -398,9 +398,10 @@ ${analysisResult.scoreDetails.map(s => `- ${s.category}: ${s.weakness}`).join('\
 ## NGUYÊN TẮC SỬA:
 1. **Chính tả**: Sửa đúng theo danh sách
 2. **Đạo văn**: Viết lại hoàn toàn với văn phong mới, áp dụng kỹ thuật PARAPHRASE:
-   - Thay đổi từ vựng (học sinh → người học, giáo viên → nhà giáo)
+   - Thay đổi từ vựng (sử dụng từ đồng nghĩa)
    - Đổi cấu trúc câu (chủ động ↔ bị động)
    - Thêm trạng từ/tính từ học thuật
+   - ⚠️ GIỮ NGUYÊN: "học sinh" (KHÔNG sửa thành "người học"), "giáo viên" (KHÔNG sửa thành "nhà giáo")
 3. **Cấu trúc**: Tăng độ phức tạp câu, thêm mệnh đề
 4. **Từ vựng**: Bổ sung từ chuyên ngành (hiện thực hóa, tối ưu hóa, cá nhân hóa...)
 5. **Số liệu**: Nếu thấy số tròn (50%, 60%), thay bằng số lẻ (47.3%, 62.8%)
@@ -458,6 +459,168 @@ CHÚ Ý: Mảng changes chỉ liệt kê tối đa 10 thay đổi quan trọng n
       }
     } catch (error: any) {
       console.warn(`[AutoFix] Model ${model} thất bại:`, error.message);
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("Tất cả các model đều thất bại");
+};
+
+/**
+ * Phân tích tên đề tài SKKN
+ * Kiểm tra trùng lặp, đánh giá độ khả thi, tính mới và đề xuất tên thay thế
+ */
+export const analyzeTitleSKKN = async (
+  title: string,
+  subject?: string,
+  level?: string
+): Promise<TitleAnalysisResult> => {
+  const apiKey = getApiKey();
+  const selectedModel = getModel();
+
+  const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
+  const ai = new GoogleGenAI({ apiKey });
+
+  const prompt = `
+Bạn là chuyên gia phân tích tên đề tài Sáng kiến kinh nghiệm (SKKN) với 20 năm kinh nghiệm.
+
+## THÔNG TIN ĐỀ TÀI CẦN PHÂN TÍCH:
+- Tên đề tài: "${title}"
+${subject ? `- Môn học/Lĩnh vực: ${subject}` : ''}
+${level ? `- Cấp học: ${level}` : ''}
+
+## QUY TRÌNH PHÂN TÍCH (5 BƯỚC):
+
+### BƯỚC 1: PHÂN TÍCH CẤU TRÚC
+Tên đề tài SKKN chuẩn: [Hành động] + [Đối tượng/Nội dung] + [Phương tiện/Công cụ] + [Mục đích] + [Phạm vi]
+- Xác định từng thành phần có/không trong tên đề tài
+
+### BƯỚC 2: KIỂM TRA TRÙNG LẶP
+So sánh với database đề tài phổ biến:
+
+🔴 TRÙNG LẶP CAO (80-90%):
+- "Ứng dụng AI trong dạy học môn [X]"
+- "Sử dụng ChatGPT hỗ trợ [công việc Y]"
+- "Ứng dụng Canva thiết kế bài giảng"
+- "Sử dụng Kahoot/Quizizz tăng tính tương tác"
+- "Dạy học trực tuyến qua Google Meet/Zoom"
+- "Ứng dụng Google Classroom quản lý lớp học"
+
+🟡 TRÙNG LẶP TRUNG BÌNH (60-70%):
+- "Dạy học theo dự án (PBL) môn [X]"
+- "Phương pháp dạy học tích cực môn [X]"
+- "Dạy học theo nhóm hiệu quả"
+- "Phát triển năng lực tự học của học sinh"
+
+🟢 TRÙNG LẶP THẤP (20-40%):
+- "Kết hợp AI và PBL trong dạy STEM lớp 8"
+- Các đề tài kết hợp nhiều phương pháp
+- Đề tài có đối tượng đặc biệt (HS khuyết tật, vùng cao)
+
+### BƯỚC 3: CHẤM ĐIỂM (TỔNG 100 ĐIỂM)
+
+1. **Độ cụ thể (max 25đ)**:
+   - 25: Có đầy đủ: môn học, cấp học, công cụ, phạm vi cụ thể
+   - 20: Có 3/4 yếu tố
+   - 15: Có 2/4 yếu tố
+   - 10: Chỉ có 1 yếu tố cụ thể
+   - 5: Quá chung chung
+
+2. **Tính mới (max 30đ)**:
+   - 30: Chưa ai làm, hoàn toàn mới
+   - 25: Kết hợp 2-3 yếu tố mới
+   - 20: Có 1 điểm mới rõ ràng
+   - 15: Cải tiến từ đề tài cũ
+   - 10: Đã có nhiều người làm
+   - 5: Trùng lặp hoàn toàn
+
+3. **Tính khả thi (max 25đ)**:
+   - 25: Rất dễ thực hiện, nguồn lực sẵn có
+   - 20: Khả thi, cần chuẩn bị ít
+   - 15: Khả thi nhưng cần thời gian/chi phí
+   - 10: Khó khăn, cần nhiều nguồn lực
+   - 5: Không khả thi
+
+4. **Độ rõ ràng (max 20đ)**:
+   - 20: Tên ngắn gọn, dễ hiểu, có từ khóa rõ
+   - 15: Rõ ràng nhưng hơi dài
+   - 10: Có thể hiểu nhưng chưa tối ưu
+   - 5: Khó hiểu, rườm rà
+
+### BƯỚC 4: PHÁT HIỆN VẤN ĐỀ
+Cảnh báo nếu có:
+- Từ ngữ chung chung: "ứng dụng công nghệ", "nâng cao chất lượng", "một số biện pháp"
+- Từ quá tham vọng: "toàn diện", "cách mạng hóa", "đột phá"
+- Công cụ lỗi thời: "băng hình", "đĩa CD", "máy chiếu overhead"
+- Công cụ quá phổ biến: "ChatGPT", "Kahoot", "Google Classroom"
+
+### BƯỚC 5: ĐỀ XUẤT 5 TÊN THAY THẾ (Áp dụng công thức)
+- Công thức 1: Cụ thể hóa - Thêm [Cấp học] + [Bối cảnh đặc biệt]
+- Công thức 2: Kết hợp - [Công nghệ A] + [Phương pháp B] + [Môn học C]
+- Công thức 3: Đối tượng đặc biệt - [Phương pháp] + [HS đặc thù] + [Mục tiêu]
+- Công thức 4: Bài học cụ thể - [Phương pháp] + [Bài/Chương cụ thể] + [Công cụ]
+- Công thức 5: Tạo công cụ mới - Thiết kế [Công cụ tự tạo] + [Mục đích]
+
+## YÊU CẦU ĐẦU RA:
+Trả về JSON với format:
+{
+  "structure": {
+    "action": "Từ khóa hành động (hoặc rỗng nếu không có)",
+    "tool": "Công cụ/Phương tiện (hoặc rỗng)",
+    "subject": "Môn học/Lĩnh vực",
+    "scope": "Phạm vi (lớp, cấp học)",
+    "purpose": "Mục đích"
+  },
+  "duplicateLevel": "Cao|Trung bình|Thấp",
+  "duplicateDetails": "Giải thích chi tiết về mức độ trùng lặp, có bao nhiêu đề tài tương tự",
+  "scores": {
+    "specificity": <điểm>,
+    "novelty": <điểm>,
+    "feasibility": <điểm>,
+    "clarity": <điểm>,
+    "total": <tổng điểm>
+  },
+  "scoreDetails": [
+    { "category": "Độ cụ thể", "score": <điểm>, "maxScore": 25, "reason": "lý do" },
+    { "category": "Tính mới", "score": <điểm>, "maxScore": 30, "reason": "lý do" },
+    { "category": "Tính khả thi", "score": <điểm>, "maxScore": 25, "reason": "lý do" },
+    { "category": "Độ rõ ràng", "score": <điểm>, "maxScore": 20, "reason": "lý do" }
+  ],
+  "problems": ["Vấn đề 1", "Vấn đề 2", ...],
+  "suggestions": [
+    { "title": "Tên đề tài mới 1", "strength": "Điểm mạnh", "predictedScore": <điểm dự kiến> },
+    { "title": "Tên đề tài mới 2", "strength": "Điểm mạnh", "predictedScore": <điểm dự kiến> },
+    { "title": "Tên đề tài mới 3", "strength": "Điểm mạnh", "predictedScore": <điểm dự kiến> },
+    { "title": "Tên đề tài mới 4", "strength": "Điểm mạnh", "predictedScore": <điểm dự kiến> },
+    { "title": "Tên đề tài mới 5", "strength": "Điểm mạnh", "predictedScore": <điểm dự kiến> }
+  ],
+  "relatedTopics": ["Đề tài mới nổi liên quan 1", "Đề tài mới nổi liên quan 2", ...],
+  "overallVerdict": "Đánh giá tổng quan và lời khuyên cuối cùng"
+}
+`;
+
+  let lastError: Error | null = null;
+
+  for (const model of modelsToTry) {
+    try {
+      console.log(`[TitleAnalysis] Đang thử model: ${model}`);
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          temperature: 0.3,
+        },
+      });
+
+      if (response.text) {
+        const result = JSON.parse(response.text) as TitleAnalysisResult;
+        return result;
+      } else {
+        throw new Error("Empty response from Gemini");
+      }
+    } catch (error: any) {
+      console.warn(`[TitleAnalysis] Model ${model} thất bại:`, error.message);
       lastError = error;
     }
   }

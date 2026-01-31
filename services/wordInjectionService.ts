@@ -263,3 +263,159 @@ export const replaceFullContent = async (
         throw new Error(`Không thể thay thế nội dung: ${error.message}`);
     }
 };
+
+/**
+ * Tìm text trong XML document và thay thế bằng text mới với màu đỏ
+ * Giữ nguyên tất cả cấu trúc XML khác (OLE, hình ảnh, bảng, công thức...)
+ */
+const findAndReplaceTextInDocument = (
+    documentXml: string,
+    originalText: string,
+    newText: string
+): { result: string; replaced: boolean } => {
+    // Normalize text để so sánh
+    const normalize = (t: string) => t.replace(/\s+/g, ' ').trim().toLowerCase();
+    const normalizedOriginal = normalize(originalText);
+
+    // Tìm tất cả paragraphs
+    const paragraphRegex = /<w:p[^>]*>[\s\S]*?<\/w:p>/g;
+    let match;
+    let modifiedXml = documentXml;
+
+    while ((match = paragraphRegex.exec(documentXml)) !== null) {
+        const paragraph = match[0];
+
+        // Trích xuất tất cả text từ paragraph
+        const textMatches = paragraph.match(/<w:t[^>]*>([^<]*)<\/w:t>/g) || [];
+        const fullText = textMatches
+            .map(t => t.replace(/<w:t[^>]*>([^<]*)<\/w:t>/, '$1'))
+            .join('');
+
+        const normalizedFull = normalize(fullText);
+
+        // Kiểm tra xem paragraph có chứa text cần tìm không
+        if (normalizedFull.includes(normalizedOriginal)) {
+            // Tìm thấy! Thay thế trong paragraph này
+            // Chiến lược: Tìm vị trí chính xác và thay thế
+
+            // Tìm text gốc trong fullText (case insensitive, flexible whitespace)
+            const originalRegex = new RegExp(
+                originalText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'),
+                'i'
+            );
+            const foundMatch = fullText.match(originalRegex);
+
+            if (foundMatch) {
+                // Tạo paragraph mới với text đã thay thế (màu đỏ)
+                const beforeText = fullText.substring(0, foundMatch.index);
+                const afterText = fullText.substring(foundMatch.index! + foundMatch[0].length);
+
+                // Tạo runs mới
+                let newRuns = '';
+                if (beforeText) {
+                    newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(beforeText)}</w:t></w:r>`;
+                }
+                // Text mới với màu đỏ (KHÔNG in đậm, KHÔNG highlight)
+                newRuns += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(newText)}</w:t></w:r>`;
+                if (afterText) {
+                    newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(afterText)}</w:t></w:r>`;
+                }
+
+                // Giữ nguyên pPr (paragraph properties) nếu có
+                const pPrMatch = paragraph.match(/<w:pPr>[\s\S]*?<\/w:pPr>/);
+                const pPr = pPrMatch ? pPrMatch[0] : '';
+
+                const newParagraph = `<w:p>${pPr}${newRuns}</w:p>`;
+
+                modifiedXml = modifiedXml.replace(paragraph, newParagraph);
+                return { result: modifiedXml, replaced: true };
+            }
+        }
+    }
+
+    return { result: modifiedXml, replaced: false };
+};
+
+/**
+ * Xuất nội dung đã sửa vào file Word gốc sử dụng XML Injection
+ * 🎯 KỸ THUẬT CHÍNH:
+ *   - Tìm và thay thế TEXT CỤ THỂ trong các run
+ *   - Giữ nguyên TẤT CẢ cấu trúc gốc: OLE Objects, hình ảnh, bảng, công thức MathType
+ *   - Chỉ thay đổi phần text bị sửa → màu đỏ
+ *   - KHÔNG thay thế toàn bộ body
+ * 
+ * @param originalFile - File DOCX gốc
+ * @param fixedContent - Nội dung đã sửa (dùng để fallback nếu không có changes)  
+ * @param changes - Danh sách các thay đổi cụ thể (original -> fixed)
+ */
+export const injectFixedContentToDocx = async (
+    originalFile: OriginalDocxFile,
+    fixedContent: string,
+    changes?: Array<{ original: string, fixed: string, type: string }>
+): Promise<Blob> => {
+    try {
+        // 1. Giải nén file DOCX
+        const zip = await JSZip.loadAsync(originalFile.arrayBuffer);
+
+        // 2. Đọc document.xml
+        const documentXmlFile = zip.file('word/document.xml');
+        if (!documentXmlFile) {
+            throw new Error('File DOCX không hợp lệ - thiếu document.xml');
+        }
+
+        let documentXml = await documentXmlFile.async('string');
+
+        // 3. Nếu có danh sách changes, sử dụng XML Injection để thay thế từng đoạn
+        if (changes && changes.length > 0) {
+            let successCount = 0;
+            const failedChanges: string[] = [];
+
+            for (const change of changes) {
+                const { result, replaced } = findAndReplaceTextInDocument(
+                    documentXml,
+                    change.original,
+                    change.fixed
+                );
+
+                if (replaced) {
+                    documentXml = result;
+                    successCount++;
+                    console.log(`✓ [${change.type}] Đã thay thế: "${change.original.substring(0, 30)}..."`);
+                } else {
+                    failedChanges.push(change.original.substring(0, 50));
+                    console.log(`✗ Không tìm thấy: "${change.original.substring(0, 30)}..."`);
+                }
+            }
+
+            console.log(`XML Injection: ${successCount}/${changes.length} thay đổi thành công`);
+
+            // 4. Thêm ghi chú nếu có thay đổi thất bại
+            if (failedChanges.length > 0) {
+                const noteXml = `
+                <w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="12" w:space="1" w:color="FFA500"/></w:pBdr></w:pPr></w:p>
+                <w:p><w:r><w:rPr><w:b/><w:color w:val="FFA500"/></w:rPr><w:t>═══ GHI CHÚ: Một số đoạn cần sửa thủ công ═══</w:t></w:r></w:p>
+                <w:p><w:r><w:t>Các đoạn sau không tìm thấy vị trí chính xác trong file, vui lòng kiểm tra:</w:t></w:r></w:p>
+                ${failedChanges.map(s => `<w:p><w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t>• ${escapeXml(s)}...</w:t></w:r></w:p>`).join('')}
+                `;
+                documentXml = documentXml.replace('</w:body>', noteXml + '</w:body>');
+            }
+        } else {
+            // Fallback: Không có changes array → không làm gì (hoặc log warning)
+            console.warn('⚠️ Không có danh sách changes để thực hiện XML Injection');
+        }
+
+        // 5. Ghi lại document.xml
+        zip.file('word/document.xml', documentXml);
+
+        // 6. Tạo file mới
+        return await zip.generateAsync({
+            type: 'blob',
+            mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        });
+
+    } catch (error: any) {
+        console.error('Inject Fixed Content Error:', error);
+        throw new Error(`Không thể chèn nội dung đã sửa: ${error.message}`);
+    }
+};
+
