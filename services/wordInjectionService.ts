@@ -42,8 +42,8 @@ const textToWordXml = (text: string, isHighlighted: boolean = false): string => 
     const escapedText = escapeXml(text);
 
     if (isHighlighted) {
-        // Đánh dấu nội dung đã sửa bằng màu xanh lá
-        return `<w:p><w:r><w:rPr><w:color w:val="008000"/><w:highlight w:val="yellow"/></w:rPr><w:t>${escapedText}</w:t></w:r></w:p>`;
+        // Đánh dấu nội dung đã sửa bằng màu đỏ
+        return `<w:p><w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t>${escapedText}</w:t></w:r></w:p>`;
     }
 
     return `<w:p><w:r><w:t>${escapedText}</w:t></w:r></w:p>`;
@@ -93,7 +93,8 @@ const findAndReplace = (
         // So sánh
         if (paragraphNormalized.includes(originalNormalized)) {
             // Tìm thấy! Thay thế paragraph
-            const newParagraphContent = `<w:p><w:r><w:rPr><w:color w:val="008000"/></w:rPr><w:t>${escapeXml(replacement)}</w:t></w:r></w:p>`;
+            // Đánh dấu nội dung đã sửa bằng màu đỏ
+            const newParagraphContent = `<w:p><w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t>${escapeXml(replacement)}</w:t></w:r></w:p>`;
 
             modifiedXml = modifiedXml.replace(fullParagraph, newParagraphContent);
             replaced = true;
