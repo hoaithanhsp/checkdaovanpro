@@ -250,10 +250,43 @@ const App: React.FC = () => {
       <main className="flex-grow p-4 md:p-8">
         {status === AnalysisStatus.IDLE && (
           <div className="flex flex-col items-center justify-center space-y-8 py-10">
-            <div className="text-center max-w-2xl mx-auto mb-6">
-              <h2 className="text-4xl font-extrabold text-gray-900 mb-4">Nâng tầm Sáng kiến kinh nghiệm của bạn</h2>
-              <p className="text-lg text-gray-600">
-                Công cụ AI hỗ trợ giáo viên kiểm tra đạo văn, soát lỗi chính tả và tư vấn chiến lược đạt giải cao.
+            <div className="text-center max-w-3xl mx-auto mb-8">
+              {/* Title with gradient */}
+              <h1 className="text-5xl md:text-6xl font-black mb-4 tracking-tight">
+                <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent animate-pulse">
+                  SKKN
+                </span>
+                {' '}
+                <span className="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 bg-clip-text text-transparent">
+                  CHECKER
+                </span>
+                {' '}
+                <span className="bg-gradient-to-r from-orange-500 via-red-500 to-rose-500 bg-clip-text text-transparent">
+                  PRO
+                </span>
+              </h1>
+
+              {/* Subtitle */}
+              <h2 className="text-2xl md:text-3xl font-bold mb-4">
+                <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  NÂNG TẦM SÁNG KIẾN KINH NGHIỆM CỦA BẠN
+                </span>
+              </h2>
+
+              {/* Description */}
+              <p className="text-lg md:text-xl text-gray-600 dark:text-gray-300 mb-4 leading-relaxed">
+                Công cụ <span className="font-bold text-blue-600">AI</span> hỗ trợ
+                <span className="font-semibold text-red-500"> kiểm tra đạo văn</span>,
+                <span className="font-semibold text-green-600"> soát lỗi chính tả</span> và
+                <span className="font-semibold text-purple-600"> tư vấn chiến lược đạt giải cao</span>.
+              </p>
+
+              {/* Author */}
+              <p className="text-sm md:text-base">
+                <span className="text-gray-500">Phát triển bởi thầy </span>
+                <span className="font-bold bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent">
+                  Trần Hoài Thanh
+                </span>
               </p>
             </div>
             <InputForm onSubmit={handleSubmit} isLoading={false} />
