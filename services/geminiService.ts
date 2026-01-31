@@ -398,9 +398,9 @@ ${analysisResult.scoreDetails.map(s => `- ${s.category}: ${s.weakness}`).join('\
 ## NGUYÊN TẮC SỬA:
 1. **Chính tả**: Sửa đúng theo danh sách
 2. **Đạo văn**: Viết lại hoàn toàn với văn phong mới, áp dụng kỹ thuật PARAPHRASE:
-   - Thay đổi từ vựng (học sinh → người học, giáo viên → nhà giáo)
    - Đổi cấu trúc câu (chủ động ↔ bị động)
    - Thêm trạng từ/tính từ học thuật
+   - KHÔNG thay đổi: "học sinh", "giáo viên", "phụ huynh", "nhà trường" (giữ nguyên)
 3. **Cấu trúc**: Tăng độ phức tạp câu, thêm mệnh đề
 4. **Từ vựng**: Bổ sung từ chuyên ngành (hiện thực hóa, tối ưu hóa, cá nhân hóa...)
 5. **Số liệu**: Nếu thấy số tròn (50%, 60%), thay bằng số lẻ (47.3%, 62.8%)

@@ -262,3 +262,113 @@ export const replaceFullContent = async (
         throw new Error(`Không thể thay thế nội dung: ${error.message}`);
     }
 };
+
+/**
+ * Chèn TOÀN BỘ nội dung đã sửa vào file Word gốc
+ * Chuyển thẻ <red>...</red> thành chữ đỏ trong Word
+ * Bảo toàn cấu trúc file (header, footer, styles)
+ */
+export const injectFixedContentToDocx = async (
+    originalFile: OriginalDocxFile,
+    fixedContent: string
+): Promise<Blob> => {
+    try {
+        const zip = await JSZip.loadAsync(originalFile.arrayBuffer);
+
+        const documentXmlFile = zip.file('word/document.xml');
+        if (!documentXmlFile) {
+            throw new Error('File DOCX không hợp lệ');
+        }
+
+        let documentXml = await documentXmlFile.async('string');
+
+        // Tìm phần body
+        const bodyStartMatch = documentXml.match(/<w:body[^>]*>/);
+        const bodyEndMatch = documentXml.match(/<\/w:body>/);
+
+        if (!bodyStartMatch || !bodyEndMatch) {
+            throw new Error('Không tìm thấy body trong file Word');
+        }
+
+        const beforeBody = documentXml.substring(0, bodyStartMatch.index! + bodyStartMatch[0].length);
+        const afterBodyIndex = documentXml.indexOf('</w:body>');
+        const afterBody = documentXml.substring(afterBodyIndex);
+
+        // Giữ lại sectPr (page settings)
+        const sectPrMatch = documentXml.match(/<w:sectPr[\s\S]*?<\/w:sectPr>/);
+        const sectPr = sectPrMatch ? sectPrMatch[0] : '';
+
+        // Chuyển đổi nội dung có thẻ <red> thành Word XML
+        const lines = fixedContent.split('\n');
+        const newBodyContent = lines
+            .filter(line => line.trim())
+            .map(line => {
+                // Xử lý thẻ <red>...</red> trong từng dòng
+                // Tách dòng thành các phần: text thường và text đỏ
+                const parts: Array<{ text: string, isRed: boolean }> = [];
+                let remaining = line;
+
+                while (remaining.length > 0) {
+                    const redStart = remaining.indexOf('<red>');
+                    if (redStart === -1) {
+                        // Không còn thẻ red
+                        if (remaining.trim()) {
+                            parts.push({ text: remaining, isRed: false });
+                        }
+                        break;
+                    }
+
+                    // Phần trước thẻ red
+                    if (redStart > 0) {
+                        parts.push({ text: remaining.substring(0, redStart), isRed: false });
+                    }
+
+                    // Tìm </red>
+                    const redEnd = remaining.indexOf('</red>', redStart);
+                    if (redEnd === -1) {
+                        // Không có thẻ đóng, coi như text thường
+                        parts.push({ text: remaining.substring(redStart), isRed: false });
+                        break;
+                    }
+
+                    // Phần trong thẻ red
+                    const redContent = remaining.substring(redStart + 5, redEnd);
+                    parts.push({ text: redContent, isRed: true });
+
+                    remaining = remaining.substring(redEnd + 6);
+                }
+
+                // Tạo Word XML cho dòng này
+                if (parts.length === 0) {
+                    return '';
+                }
+
+                const runs = parts.map(part => {
+                    const escaped = escapeXml(part.text);
+                    if (part.isRed) {
+                        // Chữ đỏ, in đậm, có highlight vàng
+                        return `<w:r><w:rPr><w:color w:val="FF0000"/><w:b/><w:highlight w:val="yellow"/></w:rPr><w:t xml:space="preserve">${escaped}</w:t></w:r>`;
+                    }
+                    return `<w:r><w:t xml:space="preserve">${escaped}</w:t></w:r>`;
+                }).join('');
+
+                return `<w:p>${runs}</w:p>`;
+            })
+            .filter(p => p)
+            .join('');
+
+        // Ghép lại document.xml
+        documentXml = beforeBody + newBodyContent + sectPr + afterBody;
+
+        zip.file('word/document.xml', documentXml);
+
+        return await zip.generateAsync({
+            type: 'blob',
+            mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        });
+
+    } catch (error: any) {
+        console.error('Inject Fixed Content Error:', error);
+        throw new Error(`Không thể chèn nội dung vào Word: ${error.message}`);
+    }
+};

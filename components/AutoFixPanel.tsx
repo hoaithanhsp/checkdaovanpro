@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { X, Wand2, Check, FileText, AlertCircle, Copy, Download, ChevronDown, ChevronUp, FileEdit } from 'lucide-react';
 import { autoFixSKKN, AutoFixResult } from '../services/geminiService';
 import { AnalysisResult, OriginalDocxFile } from '../types';
-import { injectFixesToDocx, replaceFullContent, ReplacementSegment } from '../services/wordInjectionService';
 import FileSaver from 'file-saver';
 
 interface AutoFixPanelProps {
@@ -54,26 +53,23 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
     };
 
     /**
-     * Xuất Word với XML Injection (giữ nguyên file gốc)
-     * Bảo toàn: OLE Objects (MathType), Hình ảnh, Bảng
+     * Xuất Word với nội dung đã sửa - BÔI ĐỎ các chỗ thay đổi
+     * Chèn toàn bộ fixedContent vào file Word gốc
      */
     const handleExportWithInjection = async () => {
         if (!result || !originalDocx) return;
 
         setIsExporting(true);
         try {
-            // Chuyển đổi changes thành ReplacementSegment
-            const replacements: ReplacementSegment[] = result.changes.map(c => ({
-                original: c.original,
-                replacement: c.fixed,
-                type: c.type
-            }));
+            // Import hàm mới
+            const { injectFixedContentToDocx } = await import('../services/wordInjectionService');
 
-            const blob = await injectFixesToDocx(originalDocx, replacements);
+            // Chèn toàn bộ nội dung đã sửa (có thẻ <red>) vào file Word
+            const blob = await injectFixedContentToDocx(originalDocx, result.fixedContent);
             const newFileName = originalDocx.fileName.replace('.docx', '_DA_SUA.docx');
             FileSaver.saveAs(blob, newFileName);
 
-            console.log('✓ Xuất thành công với XML Injection, giữ nguyên OLE objects');
+            console.log('✓ Xuất thành công - Các chỗ sửa đã được bôi đỏ trong file Word');
         } catch (err: any) {
             console.error('XML Injection thất bại:', err);
             setError(`Không thể xuất với XML Injection: ${err.message}. Thử xuất file mới.`);
