@@ -87,48 +87,67 @@ const replaceTextInParagraph = (
         return { result: paragraphXml, replaced: false };
     }
 
-    // Bước 3: Tìm vị trí chính xác (case-insensitive)
-    const regex = new RegExp(
-        originalText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'),
-        'i'
-    );
-    const match = fullText.match(regex);
-
-    if (!match || match.index === undefined) {
+    // Bước 3: Kiểm tra có OLE Object không - bỏ qua nếu có
+    if (hasOleObject(paragraphXml)) {
+        console.warn('⚠️ Paragraph chứa OLE Object - bỏ qua thay thế');
         return { result: paragraphXml, replaced: false };
     }
 
-    const startIndex = match.index;
-    const endIndex = startIndex + match[0].length;
-
-    // Bước 4: Xây dựng lại paragraph
-    // Giữ nguyên: pPr (paragraph properties), OLE Objects
+    // Bước 4: Giữ nguyên pPr (paragraph properties)
     const pPrMatch = paragraphXml.match(/<w:pPr>[\s\S]*?<\/w:pPr>/);
     const pPr = pPrMatch ? pPrMatch[0] : '';
 
-    // Kiểm tra có OLE Object không
-    if (hasOleObject(paragraphXml)) {
-        console.warn('⚠️ Paragraph chứa OLE Object - bỏ qua thay thế để tránh mất công thức');
-        return { result: paragraphXml, replaced: false };
-    }
+    // Bước 5: Xác định kiểu thay thế
+    // Nếu originalText và replacementText khác nhau nhiều (viết lại) → thay thế TOÀN BỘ paragraph
+    // Nếu tương tự (sửa nhỏ) → chỉ thay thế phần cần sửa
 
-    // Tạo runs mới
-    const beforeText = fullText.substring(0, startIndex);
-    const afterText = fullText.substring(endIndex);
+    const isFullRewrite = originalText.length > 50 &&
+        (replacementText.length / originalText.length > 1.5 ||
+            replacementText.length / originalText.length < 0.7 ||
+            normalizeText(replacementText).indexOf(normalizedOriginal.substring(0, 20)) === -1);
 
     let newRuns = '';
 
-    // Run 1: Text trước đoạn cần sửa (nếu có)
-    if (beforeText.trim()) {
-        newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(beforeText)}</w:t></w:r>`;
-    }
+    if (isFullRewrite) {
+        // TRƯỜNG HỢP 1: Viết lại toàn bộ paragraph
+        // Thay thế TOÀN BỘ nội dung, không giữ beforeText/afterText
+        console.log(`📝 Thay thế toàn bộ paragraph (viết lại)`);
+        newRuns = `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(replacementText)}</w:t></w:r>`;
+    } else {
+        // TRƯỜNG HỢP 2: Sửa một phần trong paragraph
+        // Tìm vị trí chính xác và giữ beforeText/afterText
+        const regex = new RegExp(
+            originalText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'),
+            'i'
+        );
+        const match = fullText.match(regex);
 
-    // Run 2: Text đã sửa - MÀU ĐỎ (không in đậm, không highlight)
-    newRuns += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(replacementText)}</w:t></w:r>`;
+        if (!match || match.index === undefined) {
+            // Fallback: thay thế toàn bộ
+            console.log(`📝 Fallback: thay thế toàn bộ paragraph`);
+            newRuns = `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(replacementText)}</w:t></w:r>`;
+        } else {
+            const startIndex = match.index;
+            const endIndex = startIndex + match[0].length;
 
-    // Run 3: Text sau đoạn cần sửa (nếu có)
-    if (afterText.trim()) {
-        newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(afterText)}</w:t></w:r>`;
+            const beforeText = fullText.substring(0, startIndex);
+            const afterText = fullText.substring(endIndex);
+
+            console.log(`📝 Sửa một phần: before=${beforeText.length}, after=${afterText.length}`);
+
+            // Run 1: Text trước đoạn cần sửa (nếu có)
+            if (beforeText.trim()) {
+                newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(beforeText)}</w:t></w:r>`;
+            }
+
+            // Run 2: Text đã sửa - MÀU ĐỎ
+            newRuns += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(replacementText)}</w:t></w:r>`;
+
+            // Run 3: Text sau đoạn cần sửa (nếu có)
+            if (afterText.trim()) {
+                newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(afterText)}</w:t></w:r>`;
+            }
+        }
     }
 
     // Ghép lại paragraph
