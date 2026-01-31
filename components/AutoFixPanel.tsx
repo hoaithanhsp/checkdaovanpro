@@ -52,22 +52,89 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
         }
     };
 
+    /**
+     * Chuyển đổi bảng Markdown thành HTML table
+     */
+    const markdownTableToHtml = (text: string): string => {
+        const lines = text.split('\n');
+        let result: string[] = [];
+        let inTable = false;
+        let tableRows: string[] = [];
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+
+            // Phát hiện dòng bảng (bắt đầu và kết thúc bằng |)
+            if (line.startsWith('|') && line.endsWith('|')) {
+                // Bỏ qua dòng separator (|---|---|)
+                if (/^\|[\s:-]+\|$/.test(line.replace(/\|/g, '|').replace(/[-:]+/g, '-'))) {
+                    continue;
+                }
+
+                if (!inTable) {
+                    inTable = true;
+                    tableRows = [];
+                }
+                tableRows.push(line);
+            } else {
+                // Kết thúc bảng
+                if (inTable && tableRows.length > 0) {
+                    result.push(convertRowsToTable(tableRows));
+                    tableRows = [];
+                    inTable = false;
+                }
+                result.push(line);
+            }
+        }
+
+        // Xử lý bảng cuối cùng nếu có
+        if (inTable && tableRows.length > 0) {
+            result.push(convertRowsToTable(tableRows));
+        }
+
+        return result.join('\n');
+    };
+
+    const convertRowsToTable = (rows: string[]): string => {
+        let html = '<table style="border-collapse: collapse; width: 100%; margin: 10px 0;">';
+
+        rows.forEach((row, rowIndex) => {
+            const cells = row.split('|').filter(cell => cell.trim() !== '');
+            const isHeader = rowIndex === 0;
+            const cellTag = isHeader ? 'th' : 'td';
+            const bgColor = isHeader ? 'background-color: #f0f0f0;' : '';
+
+            html += '<tr>';
+            cells.forEach(cell => {
+                const cellContent = cell.trim()
+                    .replace(/<red>/g, '<span style="color: red;">')
+                    .replace(/<\/red>/g, '</span>');
+                html += `<${cellTag} style="border: 1px solid #333; padding: 8px; ${bgColor}">${cellContent}</${cellTag}>`;
+            });
+            html += '</tr>';
+        });
+
+        html += '</table>';
+        return html;
+    };
+
     const handleCopy = async () => {
         if (result?.fixedContent) {
             try {
-                // Chuyển đổi thẻ <red> thành HTML với màu đỏ
-                const htmlContent = result.fixedContent
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/&lt;red&gt;/g, '<span style="color: red;">')
-                    .replace(/&lt;\/red&gt;/g, '</span>')
+                // Bước 1: Chuyển markdown table thành HTML table
+                let processedContent = markdownTableToHtml(result.fixedContent);
+
+                // Bước 2: Chuyển đổi thẻ <red> thành HTML với màu đỏ (cho text ngoài bảng)
+                processedContent = processedContent
+                    .replace(/<red>/g, '<span style="color: red;">')
+                    .replace(/<\/red>/g, '</span>')
                     .replace(/\n/g, '<br>');
 
                 const htmlBlob = new Blob([`
                     <html>
                     <body>
                     <div style="font-family: Times New Roman, serif; font-size: 13pt;">
-                    ${htmlContent}
+                    ${processedContent}
                     </div>
                     </body>
                     </html>
