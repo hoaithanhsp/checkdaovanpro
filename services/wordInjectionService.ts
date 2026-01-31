@@ -364,8 +364,9 @@ export const injectFixedContentToDocx = async (
         }
 
         let documentXml = await documentXmlFile.async('string');
+        let useFullReplace = false;  // Flag để quyết định sử dụng fallback
 
-        // 3. Nếu có danh sách changes, sử dụng XML Injection để thay thế từng đoạn
+        // 3. Nếu có danh sách changes, thử XML Injection
         if (changes && changes.length > 0) {
             let successCount = 0;
             const failedChanges: string[] = [];
@@ -389,8 +390,12 @@ export const injectFixedContentToDocx = async (
 
             console.log(`XML Injection: ${successCount}/${changes.length} thay đổi thành công`);
 
-            // 4. Thêm ghi chú nếu có thay đổi thất bại
-            if (failedChanges.length > 0) {
+            // Nếu KHÔNG có change nào thành công, sử dụng fallback
+            if (successCount === 0) {
+                console.log('⚠️ XML Injection thất bại hoàn toàn, sử dụng fallback thay thế body');
+                useFullReplace = true;
+            } else if (failedChanges.length > 0) {
+                // Một số thành công, thêm ghi chú về các đoạn thất bại
                 const noteXml = `
                 <w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="12" w:space="1" w:color="FFA500"/></w:pBdr></w:pPr></w:p>
                 <w:p><w:r><w:rPr><w:b/><w:color w:val="FFA500"/></w:rPr><w:t>═══ GHI CHÚ: Một số đoạn cần sửa thủ công ═══</w:t></w:r></w:p>
@@ -400,8 +405,75 @@ export const injectFixedContentToDocx = async (
                 documentXml = documentXml.replace('</w:body>', noteXml + '</w:body>');
             }
         } else {
-            // Fallback: Không có changes array → không làm gì (hoặc log warning)
-            console.warn('⚠️ Không có danh sách changes để thực hiện XML Injection');
+            // Không có changes array -> sử dụng fullReplace
+            console.log('⚠️ Không có danh sách changes, sử dụng fallback thay thế body');
+            useFullReplace = true;
+        }
+
+        // 4. FALLBACK: Thay thế toàn bộ body content
+        if (useFullReplace && fixedContent) {
+            console.log('📝 Đang thay thế toàn bộ body content với fixedContent...');
+
+            // Tìm phần body
+            const bodyStartMatch = documentXml.match(/<w:body[^>]*>/);
+            const bodyEndIndex = documentXml.indexOf('</w:body>');
+
+            if (bodyStartMatch && bodyEndIndex > -1) {
+                const beforeBody = documentXml.substring(0, bodyStartMatch.index! + bodyStartMatch[0].length);
+                const afterBody = documentXml.substring(bodyEndIndex);
+
+                // Giữ lại sectPr (page settings)
+                const bodyContent = documentXml.substring(bodyStartMatch.index! + bodyStartMatch[0].length, bodyEndIndex);
+                const sectPrMatch = bodyContent.match(/<w:sectPr[\s\S]*?<\/w:sectPr>/);
+                const sectPr = sectPrMatch ? sectPrMatch[0] : '';
+
+                // Tạo paragraphs từ fixedContent
+                const paragraphs = fixedContent.split('\n').map(line => {
+                    if (!line.trim()) {
+                        return '<w:p><w:r><w:t></w:t></w:r></w:p>';
+                    }
+
+                    // Xử lý thẻ <red> trong line
+                    let runsXml = '';
+                    let currentIndex = 0;
+                    const redOpenTag = '<red>';
+                    const redCloseTag = '</red>';
+
+                    while (currentIndex < line.length) {
+                        const openIndex = line.indexOf(redOpenTag, currentIndex);
+
+                        if (openIndex === -1) {
+                            const remaining = line.substring(currentIndex);
+                            if (remaining) {
+                                runsXml += `<w:r><w:t xml:space="preserve">${escapeXml(remaining)}</w:t></w:r>`;
+                            }
+                            break;
+                        }
+
+                        if (openIndex > currentIndex) {
+                            const normalText = line.substring(currentIndex, openIndex);
+                            runsXml += `<w:r><w:t xml:space="preserve">${escapeXml(normalText)}</w:t></w:r>`;
+                        }
+
+                        const closeIndex = line.indexOf(redCloseTag, openIndex);
+                        if (closeIndex === -1) {
+                            const remaining = line.substring(openIndex + redOpenTag.length);
+                            runsXml += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(remaining)}</w:t></w:r>`;
+                            break;
+                        }
+
+                        const redText = line.substring(openIndex + redOpenTag.length, closeIndex);
+                        runsXml += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(redText)}</w:t></w:r>`;
+
+                        currentIndex = closeIndex + redCloseTag.length;
+                    }
+
+                    return `<w:p>${runsXml}</w:p>`;
+                }).join('');
+
+                documentXml = beforeBody + paragraphs + sectPr + afterBody;
+                console.log('✅ Đã thay thế body content thành công');
+            }
         }
 
         // 5. Ghi lại document.xml
