@@ -278,7 +278,7 @@ const App: React.FC = () => {
                 Công cụ <span className="font-bold text-blue-600">AI</span> hỗ trợ
                 <span className="font-semibold text-red-500"> kiểm tra đạo văn</span>,
                 <span className="font-semibold text-green-600"> soát lỗi chính tả</span> và
-                <span className="font-semibold text-purple-600"> tư vấn chiến lược đạt giải cao</span>.
+                <span className="font-semibold text-purple-600"> tư vấn chiến lược</span>.
               </p>
 
               {/* Author */}
