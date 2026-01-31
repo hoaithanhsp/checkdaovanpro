@@ -17,7 +17,7 @@ export interface VIPAccount {
 export const VIP_ACCOUNTS: VIPAccount[] = [
     { username: "admin", password: "Hoaithanh@2", displayName: "Quản trị viên" },
     // Thêm tài khoản mới ở đây, mỗi dòng 1 account:
-    // { username: "teacher1", password: "123456", displayName: "Thầy Nguyễn Văn A" },
+    // { username: "tranhuyenthnd@gmail.com", password: "123456", displayName: "Tran Huyen" },
     // { username: "teacher2", password: "abcdef", displayName: "Cô Trần Thị B" },
 ];
 
@@ -54,3 +54,4 @@ export const getLoggedInUser = (): { username: string; displayName: string } | n
 export const logout = () => {
     localStorage.removeItem('vip_user');
 };
+
