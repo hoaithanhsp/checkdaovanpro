@@ -140,6 +140,7 @@ const replaceTextInParagraph = (
 /**
  * Tìm và thay thế trong toàn bộ document
  * CHỈ thay thế runs chứa text - KHÔNG động vào OLE Objects
+ * Hỗ trợ cả paragraph thường và table cells
  */
 const findAndReplaceInDocument = (
     documentXml: string,
@@ -147,28 +148,68 @@ const findAndReplaceInDocument = (
     replacementText: string
 ): { result: string; replaced: boolean } => {
 
-    const paragraphRegex = /<w:p\b[^>]*>[\s\S]*?<\/w:p>/g;
+    // Thử tìm với đoạn text ngắn hơn nếu đoạn gốc quá dài (> 100 ký tự)
+    let searchText = originalText;
+    let replaceText = replacementText;
+
+    // Nếu đoạn quá dài, chỉ lấy 50 ký tự đầu để tìm
+    if (originalText.length > 100) {
+        // Tìm vị trí khoảng trắng gần nhất sau 50 ký tự
+        const cutPoint = originalText.indexOf(' ', 50);
+        if (cutPoint > 0 && cutPoint < 100) {
+            searchText = originalText.substring(0, cutPoint);
+            replaceText = replacementText.substring(0, Math.min(replacementText.length, cutPoint + 50));
+            console.log(`📝 Đoạn dài - chỉ tìm: "${searchText.substring(0, 40)}..."`);
+        }
+    }
+
+    // Regex để tìm cả paragraphs và table cells
+    const elementRegex = /<w:p\b[^>]*>[\s\S]*?<\/w:p>|<w:tc\b[^>]*>[\s\S]*?<\/w:tc>/g;
     let match;
     let modifiedXml = documentXml;
     let replaced = false;
 
     // Reset regex
-    paragraphRegex.lastIndex = 0;
+    elementRegex.lastIndex = 0;
 
-    while ((match = paragraphRegex.exec(documentXml)) !== null) {
-        const paragraph = match[0];
+    while ((match = elementRegex.exec(documentXml)) !== null) {
+        const element = match[0];
 
+        // Thử thay thế trong element này
         const { result, replaced: wasReplaced } = replaceTextInParagraph(
-            paragraph,
-            originalText,
-            replacementText
+            element,
+            searchText,
+            replaceText
         );
 
         if (wasReplaced) {
-            modifiedXml = modifiedXml.replace(paragraph, result);
+            modifiedXml = modifiedXml.replace(element, result);
             replaced = true;
-            console.log(`✓ Đã thay thế: "${originalText.substring(0, 50)}..."`);
+            console.log(`✓ Đã thay thế: "${searchText.substring(0, 40)}..."`);
             break;  // Chỉ thay thế lần đầu tiên
+        }
+    }
+
+    // Nếu vẫn không tìm thấy và đoạn dài, thử tìm với 30 ký tự đầu
+    if (!replaced && originalText.length > 50) {
+        const shortSearch = originalText.substring(0, 30).trim();
+        console.log(`🔍 Thử tìm với đoạn ngắn hơn: "${shortSearch}..."`);
+
+        elementRegex.lastIndex = 0;
+        while ((match = elementRegex.exec(documentXml)) !== null) {
+            const element = match[0];
+            const { result, replaced: wasReplaced } = replaceTextInParagraph(
+                element,
+                shortSearch,
+                replacementText.substring(0, 50)
+            );
+
+            if (wasReplaced) {
+                modifiedXml = modifiedXml.replace(element, result);
+                replaced = true;
+                console.log(`✓ Đã thay thế (đoạn ngắn): "${shortSearch}..."`);
+                break;
+            }
         }
     }
 
