@@ -107,6 +107,7 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
           onClose={() => setShowAutoFix(false)}
           originalContent={input.content}
           analysisResult={result}
+          originalDocx={input.originalDocx}
         />
       )}
 

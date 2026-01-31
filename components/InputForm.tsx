@@ -1,5 +1,5 @@
 import React, { useState, ChangeEvent } from 'react';
-import { SKKNInput } from '../types';
+import { SKKNInput, OriginalDocxFile } from '../types';
 import { BookOpen, Target, GraduationCap, FileText, Sparkles, Upload, Type, AlertCircle } from 'lucide-react';
 import FileUpload from './FileUpload';
 
@@ -30,6 +30,11 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, isLoading }) => {
   const handleTextExtracted = (text: string) => {
     setFormData(prev => ({ ...prev, content: text }));
     setFileError(null);
+  };
+
+  const handleDocxLoaded = (docx: OriginalDocxFile) => {
+    setFormData(prev => ({ ...prev, originalDocx: docx }));
+    console.log('Đã lưu file Word gốc cho XML Injection:', docx.fileName);
   };
 
   const handleFileError = (error: string) => {
@@ -189,6 +194,7 @@ Qua áp dụng sáng kiến, chất lượng môn Lịch sử lớp 5A đã đư
                 <FileUpload
                   onTextExtracted={handleTextExtracted}
                   onError={handleFileError}
+                  onDocxLoaded={handleDocxLoaded}
                 />
                 {fileError && (
                   <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">

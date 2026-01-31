@@ -1,13 +1,15 @@
 import React, { useRef, useState, DragEvent, ChangeEvent } from 'react';
 import { Upload, FileText, X, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { extractTextFromFile, FileReadResult } from '../services/fileService';
+import { OriginalDocxFile } from '../types';
 
 interface FileUploadProps {
     onTextExtracted: (text: string) => void;
     onError: (error: string) => void;
+    onDocxLoaded?: (docx: OriginalDocxFile) => void; // Callback khi load file Word gốc
 }
 
-const FileUpload: React.FC<FileUploadProps> = ({ onTextExtracted, onError }) => {
+const FileUpload: React.FC<FileUploadProps> = ({ onTextExtracted, onError, onDocxLoaded }) => {
     const [isDragging, setIsDragging] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [uploadedFile, setUploadedFile] = useState<{ name: string; pageCount?: number } | null>(null);
@@ -16,6 +18,19 @@ const FileUpload: React.FC<FileUploadProps> = ({ onTextExtracted, onError }) => 
     const handleFile = async (file: File) => {
         setIsProcessing(true);
         setUploadedFile(null);
+
+        // Lưu ArrayBuffer gốc nếu là file Word (cho XML Injection)
+        if (file.name.toLowerCase().endsWith('.docx') && onDocxLoaded) {
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                onDocxLoaded({
+                    arrayBuffer,
+                    fileName: file.name
+                });
+            } catch (error) {
+                console.warn('Không thể đọc ArrayBuffer:', error);
+            }
+        }
 
         const result: FileReadResult = await extractTextFromFile(file);
 

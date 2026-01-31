@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { X, Wand2, Check, FileText, AlertCircle, Copy, Download, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Wand2, Check, FileText, AlertCircle, Copy, Download, ChevronDown, ChevronUp, FileEdit } from 'lucide-react';
 import { autoFixSKKN, AutoFixResult } from '../services/geminiService';
-import { AnalysisResult } from '../types';
+import { AnalysisResult, OriginalDocxFile } from '../types';
+import { injectFixesToDocx, replaceFullContent, ReplacementSegment } from '../services/wordInjectionService';
+import FileSaver from 'file-saver';
 
 interface AutoFixPanelProps {
     isOpen: boolean;
     onClose: () => void;
     originalContent: string;
     analysisResult: AnalysisResult;
-    onExportWord?: (content: string) => void;
+    originalDocx?: OriginalDocxFile; // File Word gốc cho XML Injection
 }
 
 const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
@@ -16,9 +18,10 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
     onClose,
     originalContent,
     analysisResult,
-    onExportWord
+    originalDocx
 }) => {
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const [result, setResult] = useState<AutoFixResult | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [showChanges, setShowChanges] = useState(true);
@@ -50,9 +53,52 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
         }
     };
 
-    const handleExportWord = () => {
-        if (result?.fixedContent && onExportWord) {
-            onExportWord(result.fixedContent);
+    /**
+     * Xuất Word với XML Injection (giữ nguyên file gốc)
+     * Bảo toàn: OLE Objects (MathType), Hình ảnh, Bảng
+     */
+    const handleExportWithInjection = async () => {
+        if (!result || !originalDocx) return;
+
+        setIsExporting(true);
+        try {
+            // Chuyển đổi changes thành ReplacementSegment
+            const replacements: ReplacementSegment[] = result.changes.map(c => ({
+                original: c.original,
+                replacement: c.fixed,
+                type: c.type
+            }));
+
+            const blob = await injectFixesToDocx(originalDocx, replacements);
+            const newFileName = originalDocx.fileName.replace('.docx', '_DA_SUA.docx');
+            FileSaver.saveAs(blob, newFileName);
+
+            console.log('✓ Xuất thành công với XML Injection, giữ nguyên OLE objects');
+        } catch (err: any) {
+            console.error('XML Injection thất bại:', err);
+            setError(`Không thể xuất với XML Injection: ${err.message}. Thử xuất file mới.`);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    /**
+     * Xuất Word mới (fallback khi không có file gốc)
+     */
+    const handleExportNewWord = async () => {
+        if (!result) return;
+
+        setIsExporting(true);
+        try {
+            // Tạo blob từ nội dung text
+            const blob = new Blob([result.fixedContent], { type: 'text/plain' });
+            FileSaver.saveAs(blob, 'SKKN_DA_SUA.txt');
+
+            console.log('✓ Đã xuất file text');
+        } catch (err: any) {
+            setError(`Không thể xuất file: ${err.message}`);
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -242,13 +288,24 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
                                             {copied ? <Check size={16} /> : <Copy size={16} />}
                                             {copied ? 'Đã sao chép' : 'Sao chép'}
                                         </button>
-                                        {onExportWord && (
+                                        {originalDocx ? (
                                             <button
-                                                onClick={handleExportWord}
-                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                                                onClick={handleExportWithInjection}
+                                                disabled={isExporting}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+                                                title="Xuất vào file gốc, giữ nguyên công thức và hình ảnh"
+                                            >
+                                                <FileEdit size={16} />
+                                                {isExporting ? 'Đang xuất...' : 'Xuất Word (Giữ gốc)'}
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={handleExportNewWord}
+                                                disabled={isExporting}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                                             >
                                                 <Download size={16} />
-                                                Xuất Word
+                                                {isExporting ? 'Đang xuất...' : 'Xuất Text'}
                                             </button>
                                         )}
                                     </div>

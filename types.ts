@@ -4,6 +4,16 @@ export interface SKKNInput {
   subject: string;
   target: string;
   content: string;
+  originalDocx?: OriginalDocxFile; // File Word gốc cho XML Injection
+}
+
+/**
+ * File Word gốc để sử dụng trong XML Injection
+ * Bảo toàn OLE Objects (MathType, hình vẽ)
+ */
+export interface OriginalDocxFile {
+  arrayBuffer: ArrayBuffer;
+  fileName: string;
 }
 
 export enum AnalysisStatus {
