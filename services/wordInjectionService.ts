@@ -1,7 +1,6 @@
 /**
- * Word XML Injection Service - PHIÊN BẢN SỬA LỖI
- * Giữ nguyên: MathType, Hình ảnh, Bảng, Định dạng gốc
- * Chỉ thay đổi: Text cần sửa → màu đỏ
+ * Word XML Injection Service - VERSION FINAL
+ * FIX: Thay thế đầy đủ không cắt ngắn
  */
 
 import JSZip from 'jszip';
@@ -23,21 +22,21 @@ export interface ReplacementSegment {
  */
 const escapeXml = (text: string): string => {
     return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
+        .replace(/&/g, '&')
+        .replace(//g, '>')
+        .replace(/"/g, '"')
+        .replace(/'/g, ''');
 };
 
 /**
- * Normalize text để so sánh (xử lý Unicode và dấu tiếng Việt)
+ * Normalize text để so sánh
  */
 const normalizeText = (text: string): string => {
     return text
-        .normalize('NFC')  // Chuẩn hóa Unicode
-        .replace(/\s+/g, ' ')  // Multiple spaces → single space
-        .replace(/[\r\n\t]+/g, ' ')  // Newlines, tabs → space
+        .normalize('NFC')
+        .replace(/\s+/g, ' ')
+        .replace(/[\r
+\t]+/g, ' ')
         .trim()
         .toLowerCase();
 };
@@ -59,88 +58,69 @@ const extractTextFromParagraph = (paragraphXml: string): string => {
  * Kiểm tra xem paragraph có chứa OLE Object (MathType) không
  */
 const hasOleObject = (paragraphXml: string): boolean => {
-    return paragraphXml.includes('<o:OLEObject') ||
-        paragraphXml.includes('w:object') ||
-        paragraphXml.includes('v:shape');
-};
+    return paragraphXml.includes('<o:oleobject') ||="" paragraphxml.includes('w:object')="" paragraphxml.includes('v:shape');="" };="" **="" *="" tìm="" và="" thay="" thế="" text="" trong="" paragraph="" chiẾn="" lƯỢc="" mỚi:="" 1.="" kiếm:="" dùng="" đoạn="" ngắn="" (50-100="" ký="" tự="" đầu)="" để="" vị="" trí="" 2.="" thế:="" toÀn="" bỘ="" bằng="" replacementtext="" ĐẦy="" ĐỦ="" 3.="" không="" cắt="" ngắn:="" giữ="" nguyên="" 100%="" nội="" dung="" const="" replacetextinparagraph="(" paragraphxml:="" string,="" originaltext:="" replacementtext:="" useshortsearch:="" boolean="false" ):="" {="" result:="" string;="" replaced:="" }=""> {
 
-/**
- * Tìm và thay thế text trong paragraph
- * CHIẾN LƯỢC:
- * 1. Ghép text từ tất cả runs
- * 2. Tìm vị trí text cần thay thế
- * 3. Xây dựng lại paragraph với text mới (giữ nguyên OLE Objects)
- */
-const replaceTextInParagraph = (
-    paragraphXml: string,
-    originalText: string,
-    replacementText: string
-): { result: string; replaced: boolean } => {
-
-    // Bước 1: Trích xuất text đầy đủ
+    // Bước 1: Trích xuất text đầy đủ từ paragraph
     const fullText = extractTextFromParagraph(paragraphXml);
     const normalizedFull = normalizeText(fullText);
-    const normalizedOriginal = normalizeText(originalText);
-
-    // Bước 2: Kiểm tra có chứa text cần tìm không
-    if (!normalizedFull.includes(normalizedOriginal)) {
+    
+    // Bước 2: Xác định text để tìm kiếm
+    let searchText = originalText;
+    
+    // Nếu đoạn gốc quá dài (> 100 ký tự), chỉ dùng phần đầu để TÌM KIẾM
+    // NHƯNG VẪN THAY THẾ TOÀN BỘ
+    if (useShortSearch && originalText.length > 100) {
+        const cutPoint = originalText.indexOf(' ', 50);
+        if (cutPoint > 0 && cutPoint < 100) {
+            searchText = originalText.substring(0, cutPoint);
+            console.log(`🔍 Tìm kiếm với đoạn ngắn: "${searchText.substring(0, 40)}..."`);
+        }
+    }
+    
+    const normalizedSearch = normalizeText(searchText);
+    
+    // Bước 3: Kiểm tra có chứa text cần tìm không
+    if (!normalizedFull.includes(normalizedSearch)) {
         return { result: paragraphXml, replaced: false };
     }
-
-    // Bước 3: Tìm vị trí chính xác (case-insensitive)
+    
+    // Bước 4: Tìm vị trí chính xác (case-insensitive)
     const regex = new RegExp(
-        originalText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'),
+        searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'),
         'i'
     );
     const match = fullText.match(regex);
-
+    
     if (!match || match.index === undefined) {
         return { result: paragraphXml, replaced: false };
     }
-
-    const startIndex = match.index;
-    const endIndex = startIndex + match[0].length;
-
-    // Bước 4: Xây dựng lại paragraph
-    // Giữ nguyên: pPr (paragraph properties), OLE Objects
-    const pPrMatch = paragraphXml.match(/<w:pPr>[\s\S]*?<\/w:pPr>/);
-    const pPr = pPrMatch ? pPrMatch[0] : '';
-
-    // Kiểm tra có OLE Object không
+    
+    // Bước 5: Kiểm tra OLE Object
     if (hasOleObject(paragraphXml)) {
-        console.warn('⚠️ Paragraph chứa OLE Object - bỏ qua thay thế để tránh mất công thức');
+        console.warn('⚠️ Paragraph chứa OLE Object - bỏ qua');
         return { result: paragraphXml, replaced: false };
     }
-
-    // Tạo runs mới
-    const beforeText = fullText.substring(0, startIndex);
-    const afterText = fullText.substring(endIndex);
-
-    let newRuns = '';
-
-    // Run 1: Text trước đoạn cần sửa (nếu có)
-    if (beforeText.trim()) {
-        newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(beforeText)}</w:t></w:r>`;
-    }
-
-    // Run 2: Text đã sửa - MÀU ĐỎ (không in đậm, không highlight)
-    newRuns += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(replacementText)}</w:t></w:r>`;
-
-    // Run 3: Text sau đoạn cần sửa (nếu có)
-    if (afterText.trim()) {
-        newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(afterText)}</w:t></w:r>`;
-    }
-
-    // Ghép lại paragraph
+    
+    // Bước 6: Xây dựng lại paragraph
+    // Giữ nguyên pPr (paragraph properties)
+    const pPrMatch = paragraphXml.match(/<w:ppr>[\s\S]*?<\/w:pPr>/);
+    const pPr = pPrMatch ? pPrMatch[0] : '';
+    
+    // QUAN TRỌNG: Thay thế TOÀN BỘ paragraph bằng replacementText ĐẦY ĐỦ
+    // KHÔNG cắt ngắn replacementText
+    const newRuns = `<w:r><w:rpr><w:color w:val="FF0000"></w:color></w:rpr><w:t xml:space="preserve">${escapeXml(replacementText)}</w:t></w:r>`;
+    
     const newParagraph = `<w:p>${pPr}${newRuns}</w:p>`;
-
+    
     return { result: newParagraph, replaced: true };
 };
 
 /**
  * Tìm và thay thế trong toàn bộ document
- * CHỈ thay thế runs chứa text - KHÔNG động vào OLE Objects
- * Hỗ trợ cả paragraph thường và table cells
+ * CHIẾN LƯỢC:
+ * 1. Thử tìm với text đầy đủ trước
+ * 2. Nếu không thấy, thử với đoạn ngắn
+ * 3. Luôn thay thế TOÀN BỘ replacementText (không cắt ngắn)
  */
 const findAndReplaceInDocument = (
     documentXml: string,
@@ -148,66 +128,50 @@ const findAndReplaceInDocument = (
     replacementText: string
 ): { result: string; replaced: boolean } => {
 
-    // Thử tìm với đoạn text ngắn hơn nếu đoạn gốc quá dài (> 100 ký tự)
-    let searchText = originalText;
-    let replaceText = replacementText;
-
-    // Nếu đoạn quá dài, chỉ lấy 50 ký tự đầu để tìm
-    if (originalText.length > 100) {
-        // Tìm vị trí khoảng trắng gần nhất sau 50 ký tự
-        const cutPoint = originalText.indexOf(' ', 50);
-        if (cutPoint > 0 && cutPoint < 100) {
-            searchText = originalText.substring(0, cutPoint);
-            replaceText = replacementText.substring(0, Math.min(replacementText.length, cutPoint + 50));
-            console.log(`📝 Đoạn dài - chỉ tìm: "${searchText.substring(0, 40)}..."`);
-        }
-    }
-
-    // Regex để tìm cả paragraphs và table cells
-    const elementRegex = /<w:p\b[^>]*>[\s\S]*?<\/w:p>|<w:tc\b[^>]*>[\s\S]*?<\/w:tc>/g;
+    const elementRegex = /<w:p\b[^>]*>[\s\S]*?<\/w:p>/g;
     let match;
     let modifiedXml = documentXml;
     let replaced = false;
 
-    // Reset regex
+    // BƯỚC 1: Thử tìm với text đầy đủ trước
     elementRegex.lastIndex = 0;
-
     while ((match = elementRegex.exec(documentXml)) !== null) {
         const element = match[0];
-
-        // Thử thay thế trong element này
+        
         const { result, replaced: wasReplaced } = replaceTextInParagraph(
             element,
-            searchText,
-            replaceText
+            originalText,
+            replacementText,
+            false  // Không dùng short search
         );
-
+        
         if (wasReplaced) {
             modifiedXml = modifiedXml.replace(element, result);
             replaced = true;
-            console.log(`✓ Đã thay thế: "${searchText.substring(0, 40)}..."`);
-            break;  // Chỉ thay thế lần đầu tiên
+            console.log(`✓ Đã thay thế (full text): "${originalText.substring(0, 40)}..."`);
+            break;
         }
     }
 
-    // Nếu vẫn không tìm thấy và đoạn dài, thử tìm với 30 ký tự đầu
-    if (!replaced && originalText.length > 50) {
-        const shortSearch = originalText.substring(0, 30).trim();
-        console.log(`🔍 Thử tìm với đoạn ngắn hơn: "${shortSearch}..."`);
-
+    // BƯỚC 2: Nếu không tìm thấy và đoạn dài, thử với đoạn ngắn
+    if (!replaced && originalText.length > 100) {
+        console.log(`🔄 Thử lại với đoạn ngắn...`);
+        
         elementRegex.lastIndex = 0;
         while ((match = elementRegex.exec(documentXml)) !== null) {
             const element = match[0];
+            
             const { result, replaced: wasReplaced } = replaceTextInParagraph(
                 element,
-                shortSearch,
-                replacementText.substring(0, 50)
+                originalText,
+                replacementText,
+                true  // Dùng short search
             );
-
+            
             if (wasReplaced) {
                 modifiedXml = modifiedXml.replace(element, result);
                 replaced = true;
-                console.log(`✓ Đã thay thế (đoạn ngắn): "${shortSearch}..."`);
+                console.log(`✓ Đã thay thế (short search): "${originalText.substring(0, 40)}..."`);
                 break;
             }
         }
@@ -222,10 +186,10 @@ const findAndReplaceInDocument = (
 export const injectFixesToDocx = async (
     originalFile: OriginalDocxFile,
     replacements: ReplacementSegment[]
-): Promise<Blob> => {
+): Promise<blob> => {
     try {
         console.log('🔧 Bắt đầu XML Injection...');
-        console.log(`📋 Số lượng replacements: ${replacements.length}`);
+        console.log(`📝 Số lượng replacements: ${replacements.length}`);
 
         // 1. Giải nén file DOCX
         const zip = await JSZip.loadAsync(originalFile.arrayBuffer);
@@ -241,9 +205,15 @@ export const injectFixesToDocx = async (
 
         // 3. Thực hiện từng thay thế
         let successCount = 0;
-        let failedSegments: string[] = [];
+        let failedSegments: Array<{ original: string; replacement: string }> = [];
 
-        for (const segment of replacements) {
+        for (let i = 0; i < replacements.length; i++) {
+            const segment = replacements[i];
+            console.log(`
+--- Replacement ${i + 1}/${replacements.length} ---`);
+            console.log(`Original (${segment.original.length} chars): "${segment.original.substring(0, 50)}..."`);
+            console.log(`Replacement (${segment.replacement.length} chars): "${segment.replacement.substring(0, 50)}..."`);
+            
             const { result, replaced } = findAndReplaceInDocument(
                 documentXml,
                 segment.original,
@@ -253,24 +223,37 @@ export const injectFixesToDocx = async (
             if (replaced) {
                 documentXml = result;
                 successCount++;
+                console.log(`✅ Thành công!`);
             } else {
-                failedSegments.push(segment.original);
-                console.warn(`✗ Không tìm thấy: "${segment.original.substring(0, 50)}..."`);
+                failedSegments.push({
+                    original: segment.original,
+                    replacement: segment.replacement
+                });
+                console.warn(`❌ Thất bại!`);
             }
         }
 
-        console.log(`✅ Tổng kết: ${successCount}/${replacements.length} đoạn đã được thay thế`);
+        console.log(`
+✅ Tổng kết: ${successCount}/${replacements.length} đoạn đã được thay thế`);
 
         // 4. Nếu có đoạn không tìm thấy, thêm ghi chú vào cuối file
         if (failedSegments.length > 0) {
+            console.log(`⚠️ Thêm ghi chú cho ${failedSegments.length} đoạn không tìm thấy`);
+            
             const noteXml = `
-                <w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="12" w:space="1" w:color="FFA500"/></w:pBdr></w:pPr></w:p>
-                <w:p><w:r><w:rPr><w:b/><w:color w:val="FFA500"/></w:rPr><w:t>═══ GHI CHÚ: Một số đoạn cần sửa thủ công ═══</w:t></w:r></w:p>
-                <w:p><w:r><w:t>Các đoạn sau không tìm thấy vị trí chính xác, vui lòng sửa thủ công:</w:t></w:r></w:p>
-                ${failedSegments.map(s => `<w:p><w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t>• ${escapeXml(s.substring(0, 100))}...</w:t></w:r></w:p>`).join('')}
+                <w:p><w:ppr><w:pbdr><w:top w:val="single" w:sz="12" w:space="1" w:color="FFA500"></w:top></w:pbdr></w:ppr></w:p>
+                <w:p><w:r><w:rpr><w:b><w:color w:val="FFA500"></w:color></w:b></w:rpr><w:t>═══ GHI CHÚ: Một số đoạn cần sửa thủ công ═══</w:t></w:r></w:p>
+                <w:p><w:r><w:t>Các đoạn sau không tìm thấy vị trí chính xác trong file, vui lòng sửa thủ công:</w:t></w:r></w:p>
+                ${failedSegments.map((s, idx) => `
+                    <w:p><w:r><w:rpr><w:b></w:b></w:rpr><w:t>${idx + 1}. Đoạn gốc:</w:t></w:r></w:p>
+                    <w:p><w:r><w:t>${escapeXml(s.original.substring(0, 200))}${s.original.length > 200 ? '...' : ''}</w:t></w:r></w:p>
+                    <w:p><w:r><w:rpr><w:b><w:color w:val="FF0000"></w:color></w:b></w:rpr><w:t>→ Sửa thành:</w:t></w:r></w:p>
+                    <w:p><w:r><w:rpr><w:color w:val="FF0000"></w:color></w:rpr><w:t>${escapeXml(s.replacement.substring(0, 200))}${s.replacement.length > 200 ? '...' : ''}</w:t></w:r></w:p>
+                    <w:p><w:r><w:t></w:t></w:r></w:p>
+                `).join('')}
             `;
 
-            documentXml = documentXml.replace('</w:body>', noteXml + '</w:body>');
+            documentXml = documentXml.replace('', noteXml + '');
         }
 
         // 5. Ghi lại document.xml
@@ -294,7 +277,7 @@ export const injectFixesToDocx = async (
 /**
  * Đọc file DOCX
  */
-export const readDocxForInjection = async (file: File): Promise<OriginalDocxFile> => {
+export const readDocxForInjection = async (file: File): Promise<originaldocxfile> => {
     const arrayBuffer = await file.arrayBuffer();
     return {
         arrayBuffer,
@@ -311,23 +294,22 @@ export const saveFixedDocx = (blob: Blob, originalFileName: string): void => {
 };
 
 /**
- * Hàm wrapper cho AutoFixPanel - chuyển đổi từ changes array
- * @param originalFile - File DOCX gốc
- * @param fixedContent - Nội dung đã sửa (dùng để fallback)
- * @param changes - Danh sách thay đổi từ AI
+ * Hàm wrapper cho AutoFixPanel
  */
 export const injectFixedContentToDocx = async (
     originalFile: OriginalDocxFile,
     fixedContent: string,
     changes?: Array<{ original: string, fixed: string, type: string }>
-): Promise<Blob> => {
-    console.log('🚀 injectFixedContentToDocx được gọi');
-    console.log('📄 File:', originalFile.fileName);
-    console.log('📝 fixedContent length:', fixedContent?.length || 0);
-    console.log('📋 changes:', changes?.length || 0);
+): Promise<blob> => {
+    console.log('🔧 injectFixedContentToDocx được gọi');
+    console.log(`📁 File: ${originalFile.fileName}`);
+    console.log(`📝 fixedContent length: ${fixedContent?.length || 0}`);
+    console.log(`🔄 changes: ${changes?.length || 0}`);
 
-    // Nếu có changes, chuyển đổi format và sử dụng XML Injection
+    // Nếu có changes, sử dụng XML Injection
     if (changes && changes.length > 0) {
+        console.log('✅ Có changes, sử dụng XML Injection');
+        
         const replacements: ReplacementSegment[] = changes.map(c => ({
             original: c.original,
             replacement: c.fixed,
@@ -337,21 +319,20 @@ export const injectFixedContentToDocx = async (
         return injectFixesToDocx(originalFile, replacements);
     }
 
-    // Fallback: Nếu không có changes, thay thế toàn bộ body với fixedContent
-    console.log('⚠️ Không có changes, sử dụng fallback thay thế body');
+    // Fallback: Thay thế toàn bộ body
+    console.log('⚠️ Không có changes, sử dụng fallback');
     return fallbackReplaceBody(originalFile, fixedContent);
 };
 
 /**
  * Fallback: Thay thế toàn bộ body content
- * Dùng khi không có danh sách changes cụ thể
  */
 const fallbackReplaceBody = async (
     originalFile: OriginalDocxFile,
     fixedContent: string
-): Promise<Blob> => {
+): Promise<blob> => {
     try {
-        console.log('📝 Fallback: Thay thế toàn bộ body...');
+        console.log('🔄 Fallback: Thay thế toàn bộ body...');
 
         const zip = await JSZip.loadAsync(originalFile.arrayBuffer);
 
@@ -362,26 +343,25 @@ const fallbackReplaceBody = async (
 
         let documentXml = await documentXmlFile.async('string');
 
-        // Tìm phần body
         const bodyStartMatch = documentXml.match(/<w:body[^>]*>/);
-        const bodyEndIndex = documentXml.indexOf('</w:body>');
+        const bodyEndIndex = documentXml.indexOf('');
 
         if (bodyStartMatch && bodyEndIndex > -1) {
             const beforeBody = documentXml.substring(0, bodyStartMatch.index! + bodyStartMatch[0].length);
             const afterBody = documentXml.substring(bodyEndIndex);
 
-            // Giữ lại sectPr (page settings)
             const bodyContent = documentXml.substring(bodyStartMatch.index! + bodyStartMatch[0].length, bodyEndIndex);
-            const sectPrMatch = bodyContent.match(/<w:sectPr[\s\S]*?<\/w:sectPr>/);
+            const sectPrMatch = bodyContent.match(/<w:sectpr[\s\s]*?<\ w:sectpr="">/);
             const sectPr = sectPrMatch ? sectPrMatch[0] : '';
 
             // Tạo paragraphs từ fixedContent
-            const paragraphs = fixedContent.split('\n').map(line => {
+            const paragraphs = fixedContent.split('
+').map(line => {
                 if (!line.trim()) {
                     return '<w:p><w:r><w:t></w:t></w:r></w:p>';
                 }
 
-                // Xử lý thẻ <red> trong line
+                // Xử lý thẻ <red>
                 let runsXml = '';
                 let currentIndex = 0;
                 const redOpenTag = '<red>';
@@ -406,12 +386,12 @@ const fallbackReplaceBody = async (
                     const closeIndex = line.indexOf(redCloseTag, openIndex);
                     if (closeIndex === -1) {
                         const remaining = line.substring(openIndex + redOpenTag.length);
-                        runsXml += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(remaining)}</w:t></w:r>`;
+                        runsXml += `<w:r><w:rpr><w:color w:val="FF0000"></w:color></w:rpr><w:t xml:space="preserve">${escapeXml(remaining)}</w:t></w:r>`;
                         break;
                     }
 
                     const redText = line.substring(openIndex + redOpenTag.length, closeIndex);
-                    runsXml += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(redText)}</w:t></w:r>`;
+                    runsXml += `<w:r><w:rpr><w:color w:val="FF0000"></w:color></w:rpr><w:t xml:space="preserve">${escapeXml(redText)}</w:t></w:r>`;
 
                     currentIndex = closeIndex + redCloseTag.length;
                 }
@@ -435,3 +415,4 @@ const fallbackReplaceBody = async (
         throw new Error(`Không thể thay thế nội dung: ${error.message}`);
     }
 };
+</red></w:sectpr[\s\s]*?<\></w:body[^></blob></blob></originaldocxfile></blob></w:p\b[^></w:ppr></o:oleobject')></w:t[^></w:t[^>
