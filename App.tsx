@@ -18,6 +18,7 @@ const App: React.FC = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(false);
   const currentInputRef = useRef<SKKNInput | null>(null);
 
@@ -88,6 +89,113 @@ const App: React.FC = () => {
         isRequired={!hasApiKey}
       />
 
+      {/* Guide Modal */}
+      {showGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowGuide(false)}>
+          <div
+            className={`relative w-full max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 p-6 rounded-t-2xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                    <BookOpen size={24} className="text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Hướng dẫn sử dụng</h2>
+                    <p className="text-blue-100 text-sm">SKKN Checker Pro v1.4</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowGuide(false)}
+                  className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className={`p-6 space-y-6 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+              {/* Bước 1 */}
+              <div className={`p-4 rounded-xl ${isDark ? 'bg-gray-700' : 'bg-blue-50'}`}>
+                <h3 className={`font-bold text-lg mb-2 flex items-center gap-2 ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                  <span className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm">1</span>
+                  Nhập thông tin SKKN
+                </h3>
+                <ul className="space-y-1 ml-10 list-disc">
+                  <li>Điền <b>Tên đề tài</b> và chọn <b>Lĩnh vực</b></li>
+                  <li>Nhập nội dung SKKN hoặc <b>tải file Word/PDF</b></li>
+                  <li>Sau đó bấm <b>"Phân tích SKKN"</b></li>
+                </ul>
+              </div>
+
+              {/* Bước 2 */}
+              <div className={`p-4 rounded-xl ${isDark ? 'bg-gray-700' : 'bg-green-50'}`}>
+                <h3 className={`font-bold text-lg mb-2 flex items-center gap-2 ${isDark ? 'text-green-300' : 'text-green-700'}`}>
+                  <span className="w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center text-sm">2</span>
+                  Đọc kết quả phân tích
+                </h3>
+                <div className="ml-10 space-y-3">
+                  <div>
+                    <p className="font-semibold">📊 Điểm số tổng quan (100 điểm):</p>
+                    <ul className="list-disc ml-5">
+                      <li><b>Tính mới (30đ):</b> Sáng tạo, độc đáo của giải pháp</li>
+                      <li><b>Khả thi (40đ):</b> Khả năng áp dụng thực tế</li>
+                      <li><b>Khoa học (20đ):</b> Cơ sở lý luận, số liệu minh chứng</li>
+                      <li><b>Hình thức (10đ):</b> Trình bày, chính tả, ngữ pháp</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-semibold">⚠️ Nguy cơ đạo văn:</p>
+                    <ul className="list-disc ml-5">
+                      <li><span className="text-green-600 font-semibold">Thấp:</span> Nội dung sáng tạo, ít trùng lặp</li>
+                      <li><span className="text-yellow-600 font-semibold">Trung bình:</span> Có một số đoạn cần viết lại</li>
+                      <li><span className="text-red-600 font-semibold">Cao/Rất cao:</span> Cần viết lại nhiều đoạn</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-semibold">📝 Các mục phân tích:</p>
+                    <ul className="list-disc ml-5">
+                      <li><b>Lỗi chính tả:</b> Danh sách lỗi cần sửa</li>
+                      <li><b>Đoạn nghi đạo văn:</b> Các đoạn giống nguồn khác</li>
+                      <li><b>Kế hoạch phát triển:</b> Gợi ý cải thiện SKKN</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bước 3 */}
+              <div className={`p-4 rounded-xl ${isDark ? 'bg-gray-700' : 'bg-purple-50'}`}>
+                <h3 className={`font-bold text-lg mb-2 flex items-center gap-2 ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
+                  <span className="w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm">3</span>
+                  Tự động sửa SKKN
+                </h3>
+                <ul className="space-y-1 ml-10 list-disc">
+                  <li>Bấm <b>"Tự động Sửa SKKN"</b> để AI tự sửa lỗi</li>
+                  <li>Xem preview với <b>chữ đỏ = đã sửa</b></li>
+                  <li><b>"Xuất Word (Giữ gốc)"</b>: Giữ nguyên format, hình ảnh, công thức</li>
+                  <li><b>"Sao chép"</b>: Copy HTML để dán vào Word</li>
+                </ul>
+              </div>
+
+              {/* Tips */}
+              <div className={`p-4 rounded-xl border-2 border-dashed ${isDark ? 'border-yellow-600 bg-yellow-900/20' : 'border-yellow-400 bg-yellow-50'}`}>
+                <h3 className={`font-bold text-lg mb-2 ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>💡 Mẹo sử dụng</h3>
+                <ul className="space-y-1 ml-4 list-disc">
+                  <li>Sử dụng <b>"Lịch sử"</b> để xem lại các SKKN đã phân tích</li>
+                  <li>Dùng <b>"So sánh"</b> để đối chiếu 2 phiên bản SKKN</li>
+                  <li>Khi xuất Word, chọn <b>"Giữ gốc"</b> để bảo toàn hình ảnh, công thức</li>
+                  <li>Nếu paste vào Word không có màu, dùng <b>Ctrl+Shift+V</b> hoặc Paste Special</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className={`shadow-sm sticky top-0 z-40 transition-colors ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -123,9 +231,12 @@ const App: React.FC = () => {
               <GitCompare size={18} />
               <span className="hidden sm:inline">So sánh</span>
             </button>
-            <span className={`hidden md:flex items-center gap-1 cursor-pointer ${isDark ? 'hover:text-blue-400' : 'hover:text-blue-600'}`}>
+            <button
+              onClick={() => setShowGuide(true)}
+              className={`hidden md:flex items-center gap-1 px-3 py-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-700 hover:text-blue-400' : 'hover:bg-gray-100 hover:text-blue-600'}`}
+            >
               <BookOpen size={16} /> Hướng dẫn
-            </span>
+            </button>
             <ApiKeySettingsButton
               onClick={() => setShowApiKeyModal(true)}
               hasKey={hasApiKey}
