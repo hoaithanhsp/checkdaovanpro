@@ -311,9 +311,16 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
                                     </div>
                                 </div>
                                 <div className="p-6 max-h-96 overflow-y-auto">
-                                    <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans leading-relaxed">
-                                        {result.fixedContent}
-                                    </pre>
+                                    <div
+                                        className="whitespace-pre-wrap text-sm text-gray-700 font-sans leading-relaxed"
+                                        dangerouslySetInnerHTML={{
+                                            __html: result.fixedContent
+                                                .replace(/</g, '&lt;')
+                                                .replace(/>/g, '&gt;')
+                                                .replace(/&lt;red&gt;/g, '<span style="color: #dc2626; background-color: #fef2f2; padding: 1px 4px; border-radius: 3px; font-weight: 600;">')
+                                                .replace(/&lt;\/red&gt;/g, '</span>')
+                                        }}
+                                    />
                                 </div>
                             </div>
                         </div>
