@@ -238,15 +238,6 @@ const App: React.FC = () => {
               <p className={`text-xs font-medium tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>TRỢ LÝ THẨM ĐỊNH SKKN</p>
             </div>
           </div>
-
-          {/* Thông báo chào mừng */}
-          {loggedInUser && (
-            <div className="hidden lg:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 rounded-xl border border-emerald-500/20">
-              <span className="text-xs text-emerald-600 dark:text-emerald-400">
-                🎉 Chào mừng quý thầy cô đến với <span className="font-bold">TRỢ LÝ THẨM ĐỊNH SKKN</span>
-              </span>
-            </div>
-          )}
           <div className={`flex items-center gap-2 text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
             <button
               onClick={toggleTheme}
