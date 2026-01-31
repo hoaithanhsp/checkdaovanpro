@@ -411,7 +411,7 @@ ${originalContent}
 ## YÊU CẦU ĐẦU RA:
 Trả về JSON với format:
 {
-  "fixedContent": "Toàn bộ nội dung SKKN đã sửa (giữ nguyên định dạng)",
+  "fixedContent": "Toàn bộ nội dung SKKN đã sửa, VỚI CÁC CHỖ SỬA ĐƯỢC BÔI ĐỎ bằng thẻ <red>nội dung đã sửa</red>",
   "summary": {
     "spellingFixed": <số lỗi chính tả đã sửa>,
     "plagiarismRewritten": <số đoạn đạo văn đã viết lại>,
@@ -427,6 +427,11 @@ Trả về JSON với format:
     }
   ]
 }
+
+QUAN TRỌNG - BÔI ĐỎ CÁC CHỖ SỬA:
+- Trong fixedContent, mọi chỗ đã sửa/thay đổi phải được bọc trong thẻ <red>...</red>
+- Ví dụ: "Hiệu <red>quả</red> của phương <red>pháp</red> này..." (sửa "qủa" thành "quả", "páp" thành "pháp")
+- Giúp người đọc dễ dàng nhận biết các thay đổi
 
 CHÚ Ý: Mảng changes chỉ liệt kê tối đa 10 thay đổi quan trọng nhất.
 `;
