@@ -5,8 +5,9 @@
 import * as mammoth from 'mammoth';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Cấu hình PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Cấu hình PDF.js worker - sử dụng CDN với phiên bản cố định
+// Sử dụng unpkg.com thay vì cdnjs vì có độ tin cậy cao hơn
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 export interface FileReadResult {
     success: boolean;
