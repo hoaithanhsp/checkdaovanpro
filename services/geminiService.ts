@@ -1,5 +1,14 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { SKKNInput, AnalysisResult, TitleAnalysisResult } from "../types";
+import {
+  getNextAvailableKey,
+  markKeyError,
+  resetKeyError,
+  isQuotaOrRateLimitError,
+  isInvalidKeyError,
+  hasAnyKey,
+  ApiKeyEntry,
+} from './apiKeyService';
 
 const SYSTEM_INSTRUCTION = `
 Bạn là "SKKN Checker Pro" - Chuyên gia thẩm định Sáng kiến kinh nghiệm (SKKN) với 20 năm kinh nghiệm.
@@ -284,13 +293,18 @@ const FALLBACK_MODELS = [
   'gemini-2.5-flash'
 ];
 
-// Helper để lấy API key từ localStorage
-const getApiKey = (): string => {
-  const key = localStorage.getItem('skkn-gemini-api-key') || '';
-  if (!key) {
-    throw new Error('API Key chưa được cấu hình. Vui lòng nhập API Key trong phần Settings.');
+// Helper để lấy API key với xoay vòng
+const getApiKeyWithRotation = (): { key: string; entry: ApiKeyEntry } => {
+  if (!hasAnyKey()) {
+    throw new Error('Chưa có API Key nào được cấu hình. Vui lòng thêm API Key trong phần Settings.');
   }
-  return key;
+
+  const entry = getNextAvailableKey();
+  if (!entry) {
+    throw new Error('Tất cả API Key đều đang bị giới hạn (rate limit/quota). Vui lòng thêm key mới hoặc đợi 1 phút.');
+  }
+
+  return { key: entry.key, entry };
 };
 
 // Helper để lấy model từ localStorage
@@ -298,14 +312,12 @@ const getModel = (): string => {
   return localStorage.getItem('skkn-gemini-model') || FALLBACK_MODELS[0];
 };
 
+// Số lần thử tối đa khi xoay vòng key
+const MAX_KEY_RETRIES = 3;
+
 export const analyzeSKKNWithGemini = async (input: SKKNInput): Promise<AnalysisResult> => {
-  const apiKey = getApiKey();
   const selectedModel = getModel();
-
-  // Tạo danh sách models để thử (bắt đầu từ model đã chọn)
   const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
-
-  const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
     Phân tích SKKN sau đây:
@@ -317,35 +329,65 @@ export const analyzeSKKNWithGemini = async (input: SKKNInput): Promise<AnalysisR
   `;
 
   let lastError: Error | null = null;
+  let keyRetries = 0;
 
-  // Thử từng model trong danh sách
-  for (const model of modelsToTry) {
-    try {
-      console.log(`Đang thử model: ${model}`);
-      const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
-        },
-      });
+  // Xoay vòng key khi gặp lỗi quota
+  while (keyRetries < MAX_KEY_RETRIES) {
+    const { key: apiKey, entry: currentKey } = getApiKeyWithRotation();
+    const ai = new GoogleGenAI({ apiKey });
 
-      if (response.text) {
-        return JSON.parse(response.text) as AnalysisResult;
-      } else {
-        throw new Error("Empty response from Gemini");
+    // Thử từng model trong danh sách
+    for (const model of modelsToTry) {
+      try {
+        console.log(`[analyzeSKKN] Đang thử model: ${model} với key: ${currentKey.name}`);
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            systemInstruction: SYSTEM_INSTRUCTION,
+            responseMimeType: "application/json",
+            responseSchema: RESPONSE_SCHEMA,
+          },
+        });
+
+        if (response.text) {
+          // Thành công - reset trạng thái lỗi của key
+          resetKeyError(currentKey.id);
+          return JSON.parse(response.text) as AnalysisResult;
+        } else {
+          throw new Error("Empty response from Gemini");
+        }
+      } catch (error: any) {
+        console.warn(`Model ${model} thất bại:`, error.message);
+        lastError = error;
+
+        // Nếu là lỗi quota/rate limit, đánh dấu key và thử key khác
+        if (isQuotaOrRateLimitError(error)) {
+          markKeyError(currentKey.id, error.message);
+          console.log(`[analyzeSKKN] Key ${currentKey.name} bị giới hạn, chuyển sang key tiếp theo...`);
+          keyRetries++;
+          break; // Thoát vòng lặp model, thử key mới
+        }
+
+        // Nếu key không hợp lệ, vô hiệu hóa và thử key khác
+        if (isInvalidKeyError(error)) {
+          markKeyError(currentKey.id, 'API Key không hợp lệ');
+          keyRetries++;
+          break;
+        }
+
+        // Lỗi khác - tiếp tục thử model khác
       }
-    } catch (error: any) {
-      console.warn(`Model ${model} thất bại:`, error.message);
-      lastError = error;
-      // Tiếp tục thử model tiếp theo
+    }
+
+    // Nếu không phải lỗi cần xoay key, thoát
+    if (!isQuotaOrRateLimitError(lastError) && !isInvalidKeyError(lastError)) {
+      break;
     }
   }
 
-  // Nếu tất cả models đều thất bại
-  throw lastError || new Error("Tất cả các model đều thất bại");
+  // Nếu tất cả đều thất bại
+  throw lastError || new Error("Tất cả các model và key đều thất bại");
 };
 
 /**
@@ -355,7 +397,7 @@ export const rewritePlagiarizedText = async (
   originalText: string,
   context?: string
 ): Promise<{ rewrittenText: string; explanation: string }> => {
-  const apiKey = getApiKey();
+  const { key: apiKey, entry: currentKey } = getApiKeyWithRotation();
   const model = getModel();
 
   const ai = new GoogleGenAI({ apiKey });
@@ -392,11 +434,15 @@ Trả về JSON với format:
     });
 
     if (response.text) {
+      resetKeyError(currentKey.id);
       return JSON.parse(response.text);
     } else {
       throw new Error("Empty response from Gemini");
     }
-  } catch (error) {
+  } catch (error: any) {
+    if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
+      markKeyError(currentKey.id, error.message);
+    }
     console.error("Rewrite Error:", error);
     throw error;
   }
@@ -422,7 +468,7 @@ export const suggestReferences = async (
   subject: string,
   content: string
 ): Promise<ReferenceItem[]> => {
-  const apiKey = getApiKey();
+  const { key: apiKey, entry: currentKey } = getApiKeyWithRotation();
   const model = getModel();
 
   const ai = new GoogleGenAI({ apiKey });
@@ -466,11 +512,15 @@ Trả về JSON array với format:
     });
 
     if (response.text) {
+      resetKeyError(currentKey.id);
       return JSON.parse(response.text);
     } else {
       throw new Error("Empty response from Gemini");
     }
-  } catch (error) {
+  } catch (error: any) {
+    if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
+      markKeyError(currentKey.id, error.message);
+    }
     console.error("Reference Suggestion Error:", error);
     throw error;
   }
@@ -507,26 +557,30 @@ export const autoFixSKKN = async (
     scoreDetails: Array<{ category: string; weakness: string }>;
   }
 ): Promise<AutoFixResult> => {
-  const apiKey = getApiKey();
   const selectedModel = getModel();
-
   const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
-  const ai = new GoogleGenAI({ apiKey });
 
-  const prompt = `
+  let lastError: Error | null = null;
+  let keyRetries = 0;
+
+  while (keyRetries < MAX_KEY_RETRIES) {
+    const { key: apiKey, entry: currentKey } = getApiKeyWithRotation();
+    const ai = new GoogleGenAI({ apiKey });
+
+    const prompt = `
 Bạn là chuyên gia chỉnh sửa Sáng kiến Kinh nghiệm (SKKN) với 20 năm kinh nghiệm.
 
 ## NHIỆM VỤ:
 Tự động sửa SKKN dựa trên danh sách lỗi đã phát hiện.
 
-## YÊU CẦU ĐỊNH DẠNG (BẮT BUỘC):
+## YÊU CẦU ĐỌNH DẠNG (BẮT BUỘC):
 1. **GIỮ NGUYÊN** định dạng gốc: in đậm (**text**), in nghiêng (*text*), gạch dưới
 2. **CÔNG THỨC TOÁN**: Viết dạng LaTeX trong dấu $ (VD: $x^2 + y^2$)
 3. **BẢNG**: Giữ nguyên cấu trúc Markdown Table
 4. **HÌNH ẢNH**: Giữ nguyên các placeholder [Hình 1], [Ảnh minh họa]...
 5. **CẤU TRÚC**: Giữ nguyên các tiêu đề, phần mục I, II, III...
 
-## DANH SÁCH LỖI CẦN SỬA:
+## DANH SÁCH LỖI CẦN SỬa:
 
 ### Lỗi chính tả (${analysisResult.spellingErrors.length} lỗi):
 ${analysisResult.spellingErrors.map((e, i) => `${i + 1}. "${e.error}" → "${e.correction}"`).join('\n')}
@@ -538,14 +592,14 @@ ${analysisResult.plagiarismSegments.map((p, i) => `${i + 1}. Đoạn: "${p.segme
 ### Điểm yếu cần cải thiện:
 ${analysisResult.scoreDetails.map(s => `- ${s.category}: ${s.weakness}`).join('\n')}
 
-## NGUYÊN TẮC SỬA:
+## NGUYÊN TẮC SỬa:
 1. **Chính tả tiếng Việt**: Sửa theo các quy tắc:
    - Lỗi sa/xa, s/x: "xa cách" vs "sa sút", "sung sướng" vs "xung đột"
    - Lỗi tr/ch: "trong" vs "chong chóng", "trí tuệ" vs "chi tiết"
    - Lỗi d/gi/r: "giáo" vs "dao", "rộng" vs "dòng"
    - Lỗi hỏi/ngã: "mỹ" vs "mỉ", "sửa" vs "sủa", "kỹ năng" vs "kỉ niệm"
    - Lỗi dấu thanh đặt sai vị trí: "hoá" → "hóa", "thuỷ" → "thủy"
-   - Lỗi thiếu/thừa ký tự: "ngườii" → "người", "đạo tao" → "đào tạo"
+   - Lỗi thiếu/thừa ký tự: "người" → "người", "đạo tao" → "đào tạo"
 2. **Chuẩn hóa viết hoa**:
    - Viết hoa đầu câu sau dấu chấm
    - "KHông" → "Không", "BÁO CÁO" → "Báo cáo" (trừ tiêu đề)
@@ -618,33 +672,43 @@ CHÚ Ý:
 - SỬA CÀN TỐI THIỂU - Chỉ sửa những gì thực sự cần thiết để SKKN không bị phát hiện là AI viết.
 `;
 
-  let lastError: Error | null = null;
+    for (const model of modelsToTry) {
+      try {
+        console.log(`[AutoFix] Đang thử model: ${model} với key: ${currentKey.name}`);
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.2, // Low temperature for accurate editing
+          },
+        });
 
-  for (const model of modelsToTry) {
-    try {
-      console.log(`[AutoFix] Đang thử model: ${model}`);
-      const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          temperature: 0.2, // Low temperature for accurate editing
-        },
-      });
+        if (response.text) {
+          resetKeyError(currentKey.id);
+          const result = JSON.parse(response.text) as AutoFixResult;
+          return result;
+        } else {
+          throw new Error("Empty response from Gemini");
+        }
+      } catch (error: any) {
+        console.warn(`[AutoFix] Model ${model} thất bại:`, error.message);
+        lastError = error;
 
-      if (response.text) {
-        const result = JSON.parse(response.text) as AutoFixResult;
-        return result;
-      } else {
-        throw new Error("Empty response from Gemini");
+        if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
+          markKeyError(currentKey.id, error.message);
+          keyRetries++;
+          break;
+        }
       }
-    } catch (error: any) {
-      console.warn(`[AutoFix] Model ${model} thất bại:`, error.message);
-      lastError = error;
+    }
+
+    if (!isQuotaOrRateLimitError(lastError) && !isInvalidKeyError(lastError)) {
+      break;
     }
   }
 
-  throw lastError || new Error("Tất cả các model đều thất bại");
+  throw lastError || new Error("Tất cả các model và key đều thất bại");
 };
 
 /**
@@ -656,13 +720,17 @@ export const analyzeTitleSKKN = async (
   subject?: string,
   level?: string
 ): Promise<TitleAnalysisResult> => {
-  const apiKey = getApiKey();
   const selectedModel = getModel();
-
   const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
-  const ai = new GoogleGenAI({ apiKey });
 
-  const prompt = `
+  let lastError: Error | null = null;
+  let keyRetries = 0;
+
+  while (keyRetries < MAX_KEY_RETRIES) {
+    const { key: apiKey, entry: currentKey } = getApiKeyWithRotation();
+    const ai = new GoogleGenAI({ apiKey });
+
+    const prompt = `
 Bạn là chuyên gia phân tích tên đề tài Sáng kiến kinh nghiệm (SKKN) với 20 năm kinh nghiệm.
 
 ## THÔNG TIN ĐỀ TÀI CẦN PHÂN TÍCH:
@@ -780,31 +848,41 @@ Trả về JSON với format:
 }
 `;
 
-  let lastError: Error | null = null;
+    for (const model of modelsToTry) {
+      try {
+        console.log(`[TitleAnalysis] Đang thử model: ${model} với key: ${currentKey.name}`);
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.3,
+          },
+        });
 
-  for (const model of modelsToTry) {
-    try {
-      console.log(`[TitleAnalysis] Đang thử model: ${model}`);
-      const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          temperature: 0.3,
-        },
-      });
+        if (response.text) {
+          resetKeyError(currentKey.id);
+          const result = JSON.parse(response.text) as TitleAnalysisResult;
+          return result;
+        } else {
+          throw new Error("Empty response from Gemini");
+        }
+      } catch (error: any) {
+        console.warn(`[TitleAnalysis] Model ${model} thất bại:`, error.message);
+        lastError = error;
 
-      if (response.text) {
-        const result = JSON.parse(response.text) as TitleAnalysisResult;
-        return result;
-      } else {
-        throw new Error("Empty response from Gemini");
+        if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
+          markKeyError(currentKey.id, error.message);
+          keyRetries++;
+          break;
+        }
       }
-    } catch (error: any) {
-      console.warn(`[TitleAnalysis] Model ${model} thất bại:`, error.message);
-      lastError = error;
+    }
+
+    if (!isQuotaOrRateLimitError(lastError) && !isInvalidKeyError(lastError)) {
+      break;
     }
   }
 
-  throw lastError || new Error("Tất cả các model đều thất bại");
+  throw lastError || new Error("Tất cả các model và key đều thất bại");
 };

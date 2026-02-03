@@ -3,7 +3,7 @@ import InputForm from './components/InputForm';
 import ResultsDashboard from './components/ResultsDashboard';
 import HistoryPanel from './components/HistoryPanel';
 import ComparePanel from './components/ComparePanel';
-import ApiKeyModal, { getStoredApiKey, ApiKeySettingsButton } from './components/ApiKeyModal';
+import ApiKeyModal, { ApiKeySettingsButton } from './components/ApiKeyModal';
 import LoginPage from './components/LoginPage';
 import { SKKNInput, AnalysisResult, AnalysisStatus } from './types';
 import { analyzeSKKNWithGemini } from './services/geminiService';
@@ -11,6 +11,7 @@ import { saveToHistory, HistoryItem } from './services/historyService';
 import { getLoggedInUser, logout, VIPAccount } from './data/accounts';
 import { useTheme } from './contexts/ThemeContext';
 import { ShieldCheck, BookOpen, History, Sun, Moon, GitCompare, LogOut } from 'lucide-react';
+import { hasAnyKey } from './services/apiKeyService';
 
 const App: React.FC = () => {
   const { isDark, toggleTheme } = useTheme();
@@ -35,9 +36,10 @@ const App: React.FC = () => {
       setLoggedInUser(user);
     }
 
-    const key = getStoredApiKey();
-    setHasApiKey(!!key);
-    if (!key && user) {
+    // Kiểm tra có API key nào không (hỗ trợ nhiều key)
+    const hasKey = hasAnyKey();
+    setHasApiKey(hasKey);
+    if (!hasKey && user) {
       setShowApiKeyModal(true);
     }
   }, []);
@@ -57,7 +59,8 @@ const App: React.FC = () => {
   };
 
   const handleApiKeySave = (_apiKey: string, _model: string) => {
-    setHasApiKey(true);
+    // Refresh trạng thái key sau khi save
+    setHasApiKey(hasAnyKey());
   };
 
   const handleSubmit = async (data: SKKNInput) => {
