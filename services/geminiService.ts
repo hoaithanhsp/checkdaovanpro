@@ -152,10 +152,13 @@ const RESPONSE_SCHEMA: Schema = {
 
 // Fallback models theo thứ tự ưu tiên
 const FALLBACK_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-pro'
+  'gemini-3-flash-preview',
+  'gemini-3-pro-preview',
+  'gemini-2.5-flash'
 ];
+
+// Model mặc định
+const DEFAULT_MODEL = 'gemini-3-pro-preview';
 
 // Helper để lấy API key (đơn giản, 1 key)
 const getApiKeyOrThrow = (): string => {
@@ -173,7 +176,7 @@ const getApiKeyOrThrow = (): string => {
 
 // Helper để lấy model từ localStorage
 const getModel = (): string => {
-  return getSelectedModel() || FALLBACK_MODELS[0];
+  return getSelectedModel() || DEFAULT_MODEL;
 };
 
 export const analyzeSKKNWithGemini = async (input: SKKNInput): Promise<AnalysisResult> => {
