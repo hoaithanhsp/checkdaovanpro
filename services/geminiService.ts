@@ -402,62 +402,39 @@ export const autoFixSKKN = async (
 
   const ai = new GoogleGenAI({ apiKey });
 
+  // Giới hạn nội dung để tránh tốn quá nhiều token
+  const MAX_CONTENT_LENGTH = 15000; // ~15k ký tự
+  const MAX_SPELLING_ERRORS = 20;
+  const MAX_PLAGIARISM_SEGMENTS = 5;
+
+  const truncatedContent = originalContent.length > MAX_CONTENT_LENGTH
+    ? originalContent.substring(0, MAX_CONTENT_LENGTH) + '\n\n[... NỘI DUNG BỊ CẮT BỚT ...]'
+    : originalContent;
+
+  const limitedSpellingErrors = analysisResult.spellingErrors.slice(0, MAX_SPELLING_ERRORS);
+  const limitedPlagiarismSegments = analysisResult.plagiarismSegments.slice(0, MAX_PLAGIARISM_SEGMENTS);
+
   const prompt = `
-Bạn là chuyên gia chỉnh sửa Sáng kiến Kinh nghiệm (SKKN) với 20 năm kinh nghiệm.
+Sửa SKKN theo danh sách lỗi. GIỮ NGUYÊN định dạng gốc (bold, italic, bảng, công thức).
 
-## NHIỆM VỤ:
-Tự động sửa SKKN dựa trên danh sách lỗi đã phát hiện.
+## LỖI CẦN SỬA:
 
-## YÊU CẦU ĐỊNH DẠNG (BẮT BUỘC):
-1. **GIỮ NGUYÊN** định dạng gốc: in đậm (**text**), in nghiêng (*text*), gạch dưới
-2. **CÔNG THỨC TOÁN**: Viết dạng LaTeX trong dấu $ (VD: $x^2 + y^2$)
-3. **BẢNG**: Giữ nguyên cấu trúc Markdown Table
-4. **HÌNH ẢNH**: Giữ nguyên các placeholder [Hình 1], [Ảnh minh họa]...
-5. **CẤU TRÚC**: Giữ nguyên các tiêu đề, phần mục I, II, III...
+### Chính tả (${limitedSpellingErrors.length} lỗi):
+${limitedSpellingErrors.map((e, i) => `${i + 1}. "${e.error}" → "${e.correction}"`).join('\n')}
 
-## DANH SÁCH LỖI CẦN SỬA:
+### Đoạn đạo văn (${limitedPlagiarismSegments.length} đoạn):
+${limitedPlagiarismSegments.map((p, i) => `${i + 1}. "${p.segment.substring(0, 80)}..." → ${p.advice}`).join('\n')}
 
-### Lỗi chính tả (${analysisResult.spellingErrors.length} lỗi):
-${analysisResult.spellingErrors.map((e, i) => `${i + 1}. "${e.error}" → "${e.correction}"`).join('\n')}
+## NỘI DUNG GỐC:
+${truncatedContent}
 
-### Đoạn bị nghi đạo văn (${analysisResult.plagiarismSegments.length} đoạn):
-${analysisResult.plagiarismSegments.map((p, i) => `${i + 1}. Đoạn: "${p.segment.substring(0, 100)}..."
-   Gợi ý: ${p.advice}`).join('\n\n')}
-
-### Điểm yếu cần cải thiện:
-${analysisResult.scoreDetails.map(s => `- ${s.category}: ${s.weakness}`).join('\n')}
-
-## NỘI DUNG SKKN GỐC:
-${originalContent}
-
-## YÊU CẦU ĐẦU RA:
-Trả về JSON với format:
+## OUTPUT JSON:
 {
-  "fixedContent": "Toàn bộ nội dung SKKN đã sửa, VỚI CÁC CHỖ SỬA ĐƯỢC BÔI ĐỎ bằng thẻ <red>nội dung đã sửa</red>",
-  "summary": {
-    "spellingFixed": <số lỗi chính tả đã sửa>,
-    "plagiarismRewritten": <số đoạn đạo văn đã viết lại>,
-    "structureImproved": <số câu đã cải thiện cấu trúc>,
-    "vocabularyEnhanced": <số từ/cụm từ đã nâng cấp>
-  },
-  "changes": [
-    {
-      "type": "spelling|plagiarism|structure|vocabulary",
-      "original": "đoạn gốc ngắn",
-      "fixed": "đoạn đã sửa",
-      "reason": "lý do sửa"
-    }
-  ]
+  "fixedContent": "Nội dung đã sửa, bọc chỗ sửa trong <red>...</red>",
+  "summary": {"spellingFixed": N, "plagiarismRewritten": N, "structureImproved": N, "vocabularyEnhanced": N},
+  "changes": [{"type": "spelling|plagiarism", "original": "gốc", "fixed": "sửa", "reason": "lý do"}]
 }
-
-QUAN TRỌNG - BÔI ĐỎ CÁC CHỖ SỬA:
-- Trong fixedContent, mọi chỗ đã sửa/thay đổi phải được bọc trong thẻ <red>...</red>
-- Ví dụ: "Hiệu <red>quả</red> của phương <red>pháp</red> này..." (sửa "qủa" thành "quả", "páp" thành "pháp")
-- Giúp người đọc dễ dàng nhận biết các thay đổi
-
-CHÚ Ý: 
-- Mảng changes chỉ liệt kê tối đa 10 thay đổi quan trọng nhất.
-- SỬA CÀN TỐI THIỂU - Chỉ sửa những gì thực sự cần thiết để SKKN không bị phát hiện là AI viết.
+Chỉ liệt kê tối đa 10 changes quan trọng nhất.
 `;
 
   let lastError: Error | null = null;
