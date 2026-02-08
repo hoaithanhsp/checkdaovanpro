@@ -348,18 +348,39 @@ const App: React.FC = () => {
         )}
 
         {status === AnalysisStatus.ERROR && (
-          <div className="max-w-2xl mx-auto mt-10 p-8 bg-red-50 rounded-2xl border border-red-200 text-center">
-            <div className="inline-flex p-4 bg-red-100 rounded-full text-red-600 mb-4">
-              <ShieldCheck size={40} />
+          <div className="max-w-2xl mx-auto mt-10 p-8 bg-red-50 rounded-2xl border border-red-200">
+            <div className="text-center mb-6">
+              <div className="inline-flex p-4 bg-red-100 rounded-full text-red-600 mb-4">
+                <ShieldCheck size={40} />
+              </div>
+              <h3 className="text-2xl font-bold text-red-800 mb-2">Rất tiếc, đã có lỗi xảy ra</h3>
             </div>
-            <h3 className="text-2xl font-bold text-red-800 mb-2">Rất tiếc, đã có lỗi xảy ra</h3>
-            <p className="text-red-600 mb-6">{errorMsg}</p>
-            <button
-              onClick={handleReset}
-              className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Thử lại
-            </button>
+
+            {/* Hiển thị thông báo lỗi dạng pre để giữ format */}
+            <div className="bg-white p-4 rounded-xl border border-red-200 mb-6">
+              <pre className="text-red-700 whitespace-pre-wrap text-sm leading-relaxed font-sans">
+                {errorMsg}
+              </pre>
+            </div>
+
+            {/* Nút hành động */}
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                onClick={() => setShowApiKeyModal(true)}
+                className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
+              >
+                🔑 Đổi API Key
+              </button>
+              <button
+                onClick={() => {
+                  setErrorMsg(null);
+                  setStatus(AnalysisStatus.IDLE);
+                }}
+                className="flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors font-medium"
+              >
+                🔄 Thử lại
+              </button>
+            </div>
           </div>
         )}
 
