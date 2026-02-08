@@ -24,7 +24,7 @@ export const saveApiKey = (key: string): void => {
  * Lấy model đã chọn
  */
 export const getSelectedModel = (): string => {
-  return localStorage.getItem(MODEL_STORAGE_KEY) || 'gemini-2.5-flash';
+  return localStorage.getItem(MODEL_STORAGE_KEY) || 'gemini-3-pro-preview';
 };
 
 /**
