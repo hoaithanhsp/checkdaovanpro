@@ -158,6 +158,9 @@ Qua áp dụng sáng kiến, chất lượng môn Lịch sử lớp 5A đã đư
               <option value="THCS">THCS</option>
               <option value="THPT">THPT</option>
               <option value="GDTX">GDTX</option>
+              <option value="Trung cấp">Trung cấp</option>
+              <option value="Cao đẳng">Cao đẳng</option>
+              <option value="Đại học">Đại học</option>
             </select>
           </div>
 
