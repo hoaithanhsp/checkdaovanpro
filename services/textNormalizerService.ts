@@ -5,6 +5,14 @@
  */
 
 import { GoogleGenAI } from "@google/genai";
+import { getSelectedModel } from './apiKeyService';
+
+// Fallback models theo thứ tự ưu tiên
+const FALLBACK_MODELS = [
+    'gemini-3-flash-preview',
+    'gemini-3-pro-preview',
+    'gemini-2.5-flash'
+];
 
 // ==================== TYPES ====================
 
@@ -322,22 +330,36 @@ Trả về mảng JSON, mỗi phần tử có cấu trúc:
 **CHỈ TRẢ VỀ JSON, KHÔNG GIẢI THÍCH THÊM.**`;
 
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt
-        });
+        const selectedModel = getSelectedModel();
+        const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
+        let lastError: Error | null = null;
 
-        const responseText = response.text || '';
+        for (const model of modelsToTry) {
+            try {
+                console.log(`[TextNormalizer] Đang thử model: ${model}`);
+                const response = await ai.models.generateContent({
+                    model,
+                    contents: prompt
+                });
 
-        // Parse JSON từ response
-        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-        if (!jsonMatch) {
-            throw new Error('AI không trả về JSON hợp lệ');
+                const responseText = response.text || '';
+
+                // Parse JSON từ response
+                const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+                if (!jsonMatch) {
+                    throw new Error('AI không trả về JSON hợp lệ');
+                }
+
+                const decisions: CorrectionDecision[] = JSON.parse(jsonMatch[0]);
+                return decisions;
+            } catch (error: any) {
+                console.warn(`[TextNormalizer] Model ${model} thất bại:`, error.message);
+                lastError = error;
+                // Tiếp tục thử model khác
+            }
         }
 
-        const decisions: CorrectionDecision[] = JSON.parse(jsonMatch[0]);
-        return decisions;
-
+        throw lastError || new Error('Tất cả các model đều thất bại');
     } catch (error) {
         console.error('❌ Lỗi khi gọi AI:', error);
 

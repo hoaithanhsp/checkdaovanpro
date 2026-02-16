@@ -158,7 +158,7 @@ const FALLBACK_MODELS = [
 ];
 
 // Model mặc định
-const DEFAULT_MODEL = 'gemini-3-pro-preview';
+const DEFAULT_MODEL = 'gemini-3-flash-preview';
 
 // Helper để lấy API key (đơn giản, 1 key)
 const getApiKeyOrThrow = (): string => {
