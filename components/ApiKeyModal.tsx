@@ -16,8 +16,8 @@ interface ApiKeyModalProps {
 }
 
 const MODELS = [
-    { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', description: 'Mạnh mẽ và chi tiết', default: true },
-    { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', description: 'Nhanh và hiệu quả' },
+    { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', description: 'Nhanh và hiệu quả', default: true },
+    { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', description: 'Mạnh mẽ và chi tiết' },
     { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Ổn định và đáng tin cậy' },
 ];
 
