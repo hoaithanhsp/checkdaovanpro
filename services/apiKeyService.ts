@@ -1,10 +1,28 @@
 /**
- * API Key Management Service (Đơn giản hóa)
- * Quản lý 1 API key duy nhất
+ * API Key Management Service
+ * Quản lý API key với tự động xoay key dự phòng khi hết quota
  */
 
 const STORAGE_KEY = 'skkn-gemini-api-key';
 const MODEL_STORAGE_KEY = 'skkn-gemini-model';
+
+/**
+ * Danh sách API key dự phòng - tự động chuyển khi key hiện tại hết quota
+ */
+const FALLBACK_API_KEYS: string[] = [
+  'AIzaSyBVglmJjMCP5SneokIBij8ZazTRScfxqUM',
+  'AIzaSyCA8TnfB-x2JjNdsOVe8SjVNYNne9e_sHk',
+  'AIzaSyAuD5aEMEuCrGJ9DTuvWiiEb6QQ6hZnBlc',
+  'AIzaSyA1CIAEDWzWrBs0KQW1tfPwoHFsiXyQlCQ',
+  'AIzaSyCxQQI8973lLssmnol7TIz9Qfu6bLW2QNY',
+  'AIzaSyAVOJQb1eUQRNpdQAz3UuZ4CAMpcj0eaDc',
+];
+
+// Track key hiện tại đang dùng trong phiên: -1 = key user, 0..N = fallback index
+let currentFallbackIndex = -1;
+
+// Các key đã hết quota trong phiên này
+const exhaustedKeys = new Set<string>();
 
 /**
  * Lấy API key hiện tại
@@ -18,6 +36,9 @@ export const getApiKey = (): string => {
  */
 export const saveApiKey = (key: string): void => {
   localStorage.setItem(STORAGE_KEY, key);
+  // Reset lại trạng thái xoay key khi user lưu key mới
+  currentFallbackIndex = -1;
+  exhaustedKeys.clear();
 };
 
 /**
@@ -35,11 +56,13 @@ export const saveSelectedModel = (model: string): void => {
 };
 
 /**
- * Kiểm tra xem có API key không
+ * Kiểm tra xem có API key không (bao gồm cả fallback)
  */
 export const hasAnyKey = (): boolean => {
-  const key = getApiKey();
-  return key.length > 0;
+  const userKey = getApiKey();
+  if (userKey.length > 0) return true;
+  // Nếu user chưa nhập key thì dùng fallback
+  return FALLBACK_API_KEYS.some(k => !exhaustedKeys.has(k));
 };
 
 /**
@@ -47,6 +70,68 @@ export const hasAnyKey = (): boolean => {
  */
 export const clearApiKey = (): void => {
   localStorage.removeItem(STORAGE_KEY);
+};
+
+/**
+ * Đánh dấu 1 key đã hết quota
+ */
+export const markKeyExhausted = (key: string): void => {
+  exhaustedKeys.add(key);
+  console.warn(`🔑 API key ...${key.slice(-6)} đã bị đánh dấu hết quota.`);
+};
+
+/**
+ * Lấy API key hiện tại đang hoạt động (user key hoặc fallback)
+ * Bỏ qua các key đã hết quota
+ */
+export const getCurrentActiveKey = (): string => {
+  // Nếu đang dùng key user và chưa bị exhausted
+  if (currentFallbackIndex === -1) {
+    const userKey = getApiKey();
+    if (userKey && !exhaustedKeys.has(userKey)) {
+      return userKey;
+    }
+  }
+
+  // Tìm fallback key chưa hết quota, bắt đầu từ index hiện tại
+  const startIndex = currentFallbackIndex === -1 ? 0 : currentFallbackIndex;
+  for (let i = startIndex; i < FALLBACK_API_KEYS.length; i++) {
+    if (!exhaustedKeys.has(FALLBACK_API_KEYS[i])) {
+      currentFallbackIndex = i;
+      return FALLBACK_API_KEYS[i];
+    }
+  }
+
+  // Không tìm thấy key nào
+  return '';
+};
+
+/**
+ * Chuyển sang API key dự phòng tiếp theo
+ * Trả về key mới hoặc rỗng nếu đã hết key
+ */
+export const getNextApiKey = (): string => {
+  const startIndex = currentFallbackIndex + 1;
+
+  for (let i = startIndex; i < FALLBACK_API_KEYS.length; i++) {
+    if (!exhaustedKeys.has(FALLBACK_API_KEYS[i])) {
+      currentFallbackIndex = i;
+      console.log(`🔄 Tự động chuyển sang API key dự phòng #${i + 1} (...${FALLBACK_API_KEYS[i].slice(-6)})`);
+      return FALLBACK_API_KEYS[i];
+    }
+  }
+
+  // Đã thử hết tất cả key
+  console.warn('⚠️ Tất cả API key dự phòng đều đã hết quota!');
+  return '';
+};
+
+/**
+ * Reset trạng thái xoay key (gọi khi reload app hoặc sau 1 khoảng thời gian)
+ */
+export const resetKeyRotation = (): void => {
+  currentFallbackIndex = -1;
+  exhaustedKeys.clear();
 };
 
 /**
@@ -92,11 +177,11 @@ export const isInvalidKeyError = (error: any): boolean => {
  */
 export const getVietnameseErrorMessage = (error: any): string => {
   if (isQuotaOrRateLimitError(error)) {
-    return '⚠️ API Key đã hết quota hoặc bị giới hạn tạm thời.\n\n' +
+    return '⚠️ Tất cả API Key đã hết quota hoặc bị giới hạn tạm thời.\n\n' +
       '📝 Hướng dẫn:\n' +
-      '1. Bấm "Đổi API Key" để nhập key mới\n' +
-      '2. Lấy key miễn phí tại: aistudio.google.com/apikey\n' +
-      '3. Sau khi lưu key mới, bấm "Thử lại" để tiếp tục';
+      '1. Chờ vài phút rồi thử lại (quota sẽ được reset)\n' +
+      '2. Hoặc bấm "Đổi API Key" để nhập key mới\n' +
+      '3. Lấy key miễn phí tại: aistudio.google.com/apikey';
   }
 
   if (isInvalidKeyError(error)) {
