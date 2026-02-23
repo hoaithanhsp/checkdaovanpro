@@ -318,6 +318,13 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
                                 </label>
                             </div>
 
+                            {/* Note hướng dẫn */}
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-6 max-w-2xl mx-auto">
+                                <p className="text-xs text-amber-700 leading-relaxed">
+                                    <span className="font-semibold">📌 Note:</span> Phần chỉnh sửa sẽ được bôi <span className="text-red-600 font-semibold">đỏ</span> ở chế độ preview trên app, thầy cô copy dán vào SKKN trong trường hợp file Word xuất ra không đủ đoạn văn (do giới hạn ký tự tiêu chuẩn xử lý của AI).
+                                </p>
+                            </div>
+
                             <button
                                 onClick={handleAutoFix}
                                 className="px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-full hover:shadow-lg transform hover:scale-105 transition-all flex items-center gap-3 mx-auto"
