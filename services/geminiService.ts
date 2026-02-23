@@ -1,12 +1,14 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { SKKNInput, AnalysisResult, TitleAnalysisResult } from "../types";
 import {
-  getApiKey,
   hasAnyKey,
   isQuotaOrRateLimitError,
   isInvalidKeyError,
   getVietnameseErrorMessage,
   getSelectedModel,
+  getCurrentActiveKey,
+  getNextApiKey,
+  markKeyExhausted,
 } from './apiKeyService';
 
 const SYSTEM_INSTRUCTION = `
@@ -160,15 +162,15 @@ const FALLBACK_MODELS = [
 // Model mặc định
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
 
-// Helper để lấy API key (đơn giản, 1 key)
+// Helper để lấy API key hiện tại (hỗ trợ auto-rotation)
 const getApiKeyOrThrow = (): string => {
   if (!hasAnyKey()) {
     throw new Error('Chưa có API Key. Vui lòng nhập API Key trong phần Cài đặt.');
   }
 
-  const key = getApiKey();
+  const key = getCurrentActiveKey();
   if (!key) {
-    throw new Error('Chưa có API Key. Vui lòng nhập API Key trong phần Cài đặt.');
+    throw new Error('Tất cả API Key đã hết quota. Vui lòng chờ vài phút hoặc nhập key mới.');
   }
 
   return key;
@@ -180,7 +182,6 @@ const getModel = (): string => {
 };
 
 export const analyzeSKKNWithGemini = async (input: SKKNInput): Promise<AnalysisResult> => {
-  const apiKey = getApiKeyOrThrow();
   const selectedModel = getModel();
   const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
 
@@ -193,41 +194,55 @@ export const analyzeSKKNWithGemini = async (input: SKKNInput): Promise<AnalysisR
     - Nội dung: ${input.content}
   `;
 
-  const ai = new GoogleGenAI({ apiKey });
   let lastError: Error | null = null;
 
-  // Thử từng model trong danh sách
-  for (const model of modelsToTry) {
-    try {
-      console.log(`[analyzeSKKN] Đang thử model: ${model}`);
-      const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
-        },
-      });
+  // Vòng ngoài: xoay API key khi hết quota
+  let apiKey = getApiKeyOrThrow();
+  while (apiKey) {
+    const ai = new GoogleGenAI({ apiKey });
 
-      if (response.text) {
-        return JSON.parse(response.text) as AnalysisResult;
-      } else {
-        throw new Error("Empty response from Gemini");
-      }
-    } catch (error: any) {
-      console.warn(`Model ${model} thất bại:`, error.message);
-      lastError = error;
+    // Vòng trong: thử từng model
+    for (const model of modelsToTry) {
+      try {
+        console.log(`[analyzeSKKN] Key ...${apiKey.slice(-6)} | Model: ${model}`);
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            systemInstruction: SYSTEM_INSTRUCTION,
+            responseMimeType: "application/json",
+            responseSchema: RESPONSE_SCHEMA,
+          },
+        });
 
-      // Nếu là lỗi quota/rate limit hoặc key không hợp lệ, throw ngay với message tiếng Việt
-      if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
-        throw new Error(getVietnameseErrorMessage(error));
+        if (response.text) {
+          return JSON.parse(response.text) as AnalysisResult;
+        } else {
+          throw new Error("Empty response from Gemini");
+        }
+      } catch (error: any) {
+        console.warn(`Model ${model} thất bại:`, error.message);
+        lastError = error;
+
+        if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
+          markKeyExhausted(apiKey);
+          const nextKey = getNextApiKey();
+          if (nextKey) {
+            apiKey = nextKey;
+            break; // Break model loop, retry với key mới
+          } else {
+            throw new Error(getVietnameseErrorMessage(error));
+          }
+        }
+        // Lỗi khác - tiếp tục thử model khác
       }
-      // Lỗi khác - tiếp tục thử model khác
+    }
+    // Nếu vòng model kết thúc mà không break (không có lỗi quota), thoát while
+    if (!lastError || (!isQuotaOrRateLimitError(lastError) && !isInvalidKeyError(lastError))) {
+      break;
     }
   }
 
-  // Nếu tất cả đều thất bại
   throw lastError || new Error("Tất cả các model đều thất bại. Vui lòng thử lại sau.");
 };
 
@@ -238,10 +253,7 @@ export const rewritePlagiarizedText = async (
   originalText: string,
   context?: string
 ): Promise<{ rewrittenText: string; explanation: string }> => {
-  const apiKey = getApiKeyOrThrow();
   const model = getModel();
-
-  const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
 Bạn là chuyên gia viết lại văn bản học thuật tiếng Việt.
@@ -265,27 +277,41 @@ Trả về JSON với format:
 }
 `;
 
-  try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-      },
-    });
+  let apiKey = getApiKeyOrThrow();
 
-    if (response.text) {
-      return JSON.parse(response.text);
-    } else {
-      throw new Error("Empty response from Gemini");
+  while (apiKey) {
+    try {
+      console.log(`[Rewrite] Key ...${apiKey.slice(-6)} | Model: ${model}`);
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+        },
+      });
+
+      if (response.text) {
+        return JSON.parse(response.text);
+      } else {
+        throw new Error("Empty response from Gemini");
+      }
+    } catch (error: any) {
+      if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
+        markKeyExhausted(apiKey);
+        const nextKey = getNextApiKey();
+        if (nextKey) {
+          apiKey = nextKey;
+          continue; // Retry với key mới
+        }
+        throw new Error(getVietnameseErrorMessage(error));
+      }
+      console.error("Rewrite Error:", error);
+      throw error;
     }
-  } catch (error: any) {
-    if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
-      throw new Error(getVietnameseErrorMessage(error));
-    }
-    console.error("Rewrite Error:", error);
-    throw error;
   }
+
+  throw new Error("Không có API key khả dụng.");
 };
 
 /**
@@ -308,10 +334,7 @@ export const suggestReferences = async (
   subject: string,
   content: string
 ): Promise<ReferenceItem[]> => {
-  const apiKey = getApiKeyOrThrow();
   const model = getModel();
-
-  const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
 Bạn là chuyên gia tư vấn tài liệu tham khảo cho SKKN giáo dục Việt Nam.
@@ -342,27 +365,41 @@ Trả về JSON array với format:
 ]
 `;
 
-  try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-      },
-    });
+  let apiKey = getApiKeyOrThrow();
 
-    if (response.text) {
-      return JSON.parse(response.text);
-    } else {
-      throw new Error("Empty response from Gemini");
+  while (apiKey) {
+    try {
+      console.log(`[References] Key ...${apiKey.slice(-6)} | Model: ${model}`);
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+        },
+      });
+
+      if (response.text) {
+        return JSON.parse(response.text);
+      } else {
+        throw new Error("Empty response from Gemini");
+      }
+    } catch (error: any) {
+      if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
+        markKeyExhausted(apiKey);
+        const nextKey = getNextApiKey();
+        if (nextKey) {
+          apiKey = nextKey;
+          continue;
+        }
+        throw new Error(getVietnameseErrorMessage(error));
+      }
+      console.error("Reference Suggestion Error:", error);
+      throw error;
     }
-  } catch (error: any) {
-    if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
-      throw new Error(getVietnameseErrorMessage(error));
-    }
-    console.error("Reference Suggestion Error:", error);
-    throw error;
   }
+
+  throw new Error("Không có API key khả dụng.");
 };
 
 /**
@@ -396,11 +433,8 @@ export const autoFixSKKN = async (
     scoreDetails: Array<{ category: string; weakness: string }>;
   }
 ): Promise<AutoFixResult> => {
-  const apiKey = getApiKeyOrThrow();
   const selectedModel = getModel();
   const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
-
-  const ai = new GoogleGenAI({ apiKey });
 
   // Giới hạn nội dung - tăng lên 50k để hỗ trợ SKKN dài
   const MAX_CONTENT_LENGTH = 50000; // ~50k ký tự
@@ -444,32 +478,47 @@ Chỉ liệt kê tối đa 10 changes quan trọng nhất.
 `;
 
   let lastError: Error | null = null;
+  let apiKey = getApiKeyOrThrow();
 
-  for (const model of modelsToTry) {
-    try {
-      console.log(`[AutoFix] Đang thử model: ${model}`);
-      const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          temperature: 0.2,
-        },
-      });
+  // Vòng ngoài: xoay API key
+  while (apiKey) {
+    const ai = new GoogleGenAI({ apiKey });
 
-      if (response.text) {
-        const result = JSON.parse(response.text) as AutoFixResult;
-        return result;
-      } else {
-        throw new Error("Empty response from Gemini");
+    for (const model of modelsToTry) {
+      try {
+        console.log(`[AutoFix] Key ...${apiKey.slice(-6)} | Model: ${model}`);
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.2,
+          },
+        });
+
+        if (response.text) {
+          return JSON.parse(response.text) as AutoFixResult;
+        } else {
+          throw new Error("Empty response from Gemini");
+        }
+      } catch (error: any) {
+        console.warn(`[AutoFix] Model ${model} thất bại:`, error.message);
+        lastError = error;
+
+        if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
+          markKeyExhausted(apiKey);
+          const nextKey = getNextApiKey();
+          if (nextKey) {
+            apiKey = nextKey;
+            break;
+          } else {
+            throw new Error(getVietnameseErrorMessage(error));
+          }
+        }
       }
-    } catch (error: any) {
-      console.warn(`[AutoFix] Model ${model} thất bại:`, error.message);
-      lastError = error;
-
-      if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
-        throw new Error(getVietnameseErrorMessage(error));
-      }
+    }
+    if (!lastError || (!isQuotaOrRateLimitError(lastError) && !isInvalidKeyError(lastError))) {
+      break;
     }
   }
 
@@ -485,11 +534,8 @@ export const analyzeTitleSKKN = async (
   subject?: string,
   level?: string
 ): Promise<TitleAnalysisResult> => {
-  const apiKey = getApiKeyOrThrow();
   const selectedModel = getModel();
   const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
-
-  const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
 Bạn là chuyên gia phân tích tên đề tài Sáng kiến kinh nghiệm (SKKN) với 20 năm kinh nghiệm.
@@ -536,32 +582,46 @@ Trả về JSON với format:
 `;
 
   let lastError: Error | null = null;
+  let apiKey = getApiKeyOrThrow();
 
-  for (const model of modelsToTry) {
-    try {
-      console.log(`[TitleAnalysis] Đang thử model: ${model}`);
-      const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          temperature: 0.3,
-        },
-      });
+  while (apiKey) {
+    const ai = new GoogleGenAI({ apiKey });
 
-      if (response.text) {
-        const result = JSON.parse(response.text) as TitleAnalysisResult;
-        return result;
-      } else {
-        throw new Error("Empty response from Gemini");
+    for (const model of modelsToTry) {
+      try {
+        console.log(`[TitleAnalysis] Key ...${apiKey.slice(-6)} | Model: ${model}`);
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.3,
+          },
+        });
+
+        if (response.text) {
+          return JSON.parse(response.text) as TitleAnalysisResult;
+        } else {
+          throw new Error("Empty response from Gemini");
+        }
+      } catch (error: any) {
+        console.warn(`[TitleAnalysis] Model ${model} thất bại:`, error.message);
+        lastError = error;
+
+        if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
+          markKeyExhausted(apiKey);
+          const nextKey = getNextApiKey();
+          if (nextKey) {
+            apiKey = nextKey;
+            break;
+          } else {
+            throw new Error(getVietnameseErrorMessage(error));
+          }
+        }
       }
-    } catch (error: any) {
-      console.warn(`[TitleAnalysis] Model ${model} thất bại:`, error.message);
-      lastError = error;
-
-      if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
-        throw new Error(getVietnameseErrorMessage(error));
-      }
+    }
+    if (!lastError || (!isQuotaOrRateLimitError(lastError) && !isInvalidKeyError(lastError))) {
+      break;
     }
   }
 
