@@ -44,6 +44,36 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
                 plagiarismSegments: analysisResult.plagiarismSegments,
                 scoreDetails: analysisResult.scoreDetails
             });
+
+            // Kiểm tra nếu AI trả về fixedContent ngắn hơn đáng kể so với nội dung gốc
+            // (dấu hiệu bị cắt/thiếu nội dung)
+            const cleanFixed = fixResult.fixedContent
+                .replace(/<red>/g, '').replace(/<\/red>/g, '');
+            const ratio = cleanFixed.length / contentToFix.length;
+
+            if (ratio < 0.8 && contentToFix.length > 5000) {
+                console.warn(`⚠️ fixedContent chỉ có ${Math.round(ratio * 100)}% so với bản gốc. Nối thêm phần còn lại.`);
+                // Tìm điểm cuối cùng của fixedContent trong originalContent
+                // và nối thêm phần chưa được sửa
+                const lastChunk = cleanFixed.substring(cleanFixed.length - 100).trim();
+                const lastChunkIdx = contentToFix.indexOf(lastChunk.substring(0, 50));
+
+                if (lastChunkIdx > 0) {
+                    const appendFromIdx = lastChunkIdx + lastChunk.length;
+                    if (appendFromIdx < contentToFix.length) {
+                        const remainingContent = contentToFix.substring(appendFromIdx);
+                        fixResult.fixedContent += '\n' + remainingContent;
+                        console.log(`✓ Đã nối thêm ${remainingContent.length} ký tự còn thiếu`);
+                    }
+                } else {
+                    // Fallback: nối thêm phần sau dựa trên tỷ lệ
+                    const cutPoint = Math.floor(contentToFix.length * ratio);
+                    const remainingContent = contentToFix.substring(cutPoint);
+                    fixResult.fixedContent += '\n' + remainingContent;
+                    console.log(`✓ Fallback: nối thêm ${remainingContent.length} ký tự từ vị trí ${cutPoint}`);
+                }
+            }
+
             setResult(fixResult);
         } catch (err: any) {
             setError(err.message || 'Đã xảy ra lỗi khi sửa SKKN');
