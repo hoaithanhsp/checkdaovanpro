@@ -7,14 +7,28 @@ const STORAGE_KEY = 'skkn-gemini-api-key';
 const MODEL_STORAGE_KEY = 'skkn-gemini-model';
 
 /**
+ * Làm sạch API key - loại bỏ khoảng trắng, ký tự Unicode ẩn, BOM
+ * Tránh lỗi "String contains non ISO-8859-1 code point" khi gửi HTTP request
+ */
+const sanitizeApiKey = (key: string): string => {
+  if (!key) return '';
+  // Loại bỏ BOM, zero-width characters, khoảng trắng đầu/cuối
+  return key
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '') // zero-width chars, BOM, nbsp
+    .replace(/[^\x20-\x7E]/g, '') // chỉ giữ ký tự ASCII printable
+    .trim();
+};
+
+/**
  * Danh sách API key dự phòng - tự động chuyển khi key hiện tại hết quota
  */
 const FALLBACK_API_KEYS: string[] = [
-  'AIzaSyDBhv8uzTfLccF4yVRRbZcXL99udqk4u2c',
-  'AIzaSyAi1mM3-fGRoTqcbGlamka5SRAGUr9HF9Y',
-  'AIzaSyB4YLqOkzfd7xEliQSarXJAhi1Rll2zoFs',
-  'AIzaSyAE_RL_mpL_5pdVJ4w—jzTkEtTlAEcono',
-  'AIzaSyBsCkGTO9PkX2le8lJuNpTA9pUwKPREQWs',
+  'AIzaSyBVglmJjMCP5SneokIBij8ZazTRScfxqUM',
+  'AIzaSyCA8TnfB-x2JjNdsOVe8SjVNYNne9e_sHk',
+  'AIzaSyAuD5aEMEuCrGJ9DTuvWiiEb6QQ6hZnBlc',
+  'AIzaSyA1CIAEDWzWrBs0KQW1tfPwoHFsiXyQlCQ',
+  'AIzaSyCxQQI8973lLssmnol7TIz9Qfu6bLW2QNY',
+  'AIzaSyAVOJQb1eUQRNpdQAz3UuZ4CAMpcj0eaDc',
 ];
 
 // Track key hiện tại đang dùng trong phiên: -1 = key user, 0..N = fallback index
@@ -27,14 +41,15 @@ const exhaustedKeys = new Set<string>();
  * Lấy API key hiện tại
  */
 export const getApiKey = (): string => {
-  return localStorage.getItem(STORAGE_KEY) || '';
+  const raw = localStorage.getItem(STORAGE_KEY) || '';
+  return sanitizeApiKey(raw);
 };
 
 /**
  * Lưu API key
  */
 export const saveApiKey = (key: string): void => {
-  localStorage.setItem(STORAGE_KEY, key);
+  localStorage.setItem(STORAGE_KEY, sanitizeApiKey(key));
   // Reset lại trạng thái xoay key khi user lưu key mới
   currentFallbackIndex = -1;
   exhaustedKeys.clear();
@@ -193,4 +208,3 @@ export const getVietnameseErrorMessage = (error: any): string => {
 
   return error.message || 'Đã xảy ra lỗi không xác định. Vui lòng thử lại sau.';
 };
-
