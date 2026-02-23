@@ -402,13 +402,14 @@ export const autoFixSKKN = async (
 
   const ai = new GoogleGenAI({ apiKey });
 
-  // Giới hạn nội dung để tránh tốn quá nhiều token
-  const MAX_CONTENT_LENGTH = 15000; // ~15k ký tự
+  // Giới hạn nội dung - tăng lên 50k để hỗ trợ SKKN dài
+  const MAX_CONTENT_LENGTH = 50000; // ~50k ký tự
   const MAX_SPELLING_ERRORS = 20;
   const MAX_PLAGIARISM_SEGMENTS = 5;
 
-  const truncatedContent = originalContent.length > MAX_CONTENT_LENGTH
-    ? originalContent.substring(0, MAX_CONTENT_LENGTH) + '\n\n[... NỘI DUNG BỊ CẮT BỚT ...]'
+  const wasContentTruncated = originalContent.length > MAX_CONTENT_LENGTH;
+  const truncatedContent = wasContentTruncated
+    ? originalContent.substring(0, MAX_CONTENT_LENGTH)
     : originalContent;
 
   const limitedSpellingErrors = analysisResult.spellingErrors.slice(0, MAX_SPELLING_ERRORS);
@@ -416,6 +417,11 @@ export const autoFixSKKN = async (
 
   const prompt = `
 Sửa SKKN theo danh sách lỗi. GIỮ NGUYÊN định dạng gốc (bold, italic, bảng, công thức).
+
+⚠️ QUY TẮC QUAN TRỌNG:
+- fixedContent PHẢI chứa TOÀN BỘ nội dung gốc (đã sửa lỗi), KHÔNG ĐƯỢC bỏ bớt hay lược bỏ bất kỳ đoạn nào.
+- Chỉ thay đổi những chỗ có lỗi, phần còn lại giữ nguyên 100%.
+- Bọc mỗi chỗ đã sửa trong thẻ <red>...</red>.
 
 ## LỖI CẦN SỬA:
 
@@ -430,7 +436,7 @@ ${truncatedContent}
 
 ## OUTPUT JSON:
 {
-  "fixedContent": "Nội dung đã sửa, bọc chỗ sửa trong <red>...</red>",
+  "fixedContent": "TOÀN BỘ nội dung đã sửa (giữ nguyên phần không lỗi), bọc chỗ sửa trong <red>...</red>",
   "summary": {"spellingFixed": N, "plagiarismRewritten": N, "structureImproved": N, "vocabularyEnhanced": N},
   "changes": [{"type": "spelling|plagiarism", "original": "gốc", "fixed": "sửa", "reason": "lý do"}]
 }
