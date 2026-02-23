@@ -97,56 +97,79 @@ const replaceTextInParagraph = (
     const pPrMatch = paragraphXml.match(/<w:pPr>[\s\S]*?<\/w:pPr>/);
     const pPr = pPrMatch ? pPrMatch[0] : '';
 
-    // Bước 5: Xác định kiểu thay thế
-    // Nếu originalText và replacementText khác nhau nhiều (viết lại) → thay thế TOÀN BỘ paragraph
-    // Nếu tương tự (sửa nhỏ) → chỉ thay thế phần cần sửa
-
-    const isFullRewrite = originalText.length > 50 &&
-        (replacementText.length / originalText.length > 1.5 ||
-            replacementText.length / originalText.length < 0.7 ||
-            normalizeText(replacementText).indexOf(normalizedOriginal.substring(0, 20)) === -1);
+    // Bước 5: Luôn tìm vị trí chính xác của đoạn text cần sửa trong paragraph
+    // và giữ lại text trước/sau dù là sửa nhỏ hay viết lại toàn bộ
+    const regex = new RegExp(
+        originalText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'),
+        'i'
+    );
+    const match = fullText.match(regex);
 
     let newRuns = '';
 
-    if (isFullRewrite) {
-        // TRƯỜNG HỢP 1: Viết lại toàn bộ paragraph
-        // Thay thế TOÀN BỘ nội dung, không giữ beforeText/afterText
-        console.log(`📝 Thay thế toàn bộ paragraph (viết lại)`);
-        newRuns = `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(replacementText)}</w:t></w:r>`;
+    if (match && match.index !== undefined) {
+        const startIndex = match.index;
+        const endIndex = startIndex + match[0].length;
+
+        const beforeText = fullText.substring(0, startIndex);
+        const afterText = fullText.substring(endIndex);
+
+        console.log(`📝 Sửa chính xác: before=${beforeText.length}, matched=${match[0].length}, after=${afterText.length}`);
+
+        // Run 1: Text trước đoạn cần sửa (nếu có)
+        if (beforeText) {
+            newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(beforeText)}</w:t></w:r>`;
+        }
+
+        // Run 2: Text đã sửa - MÀU ĐỎ
+        newRuns += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(replacementText)}</w:t></w:r>`;
+
+        // Run 3: Text sau đoạn cần sửa (nếu có)
+        if (afterText) {
+            newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(afterText)}</w:t></w:r>`;
+        }
     } else {
-        // TRƯỜNG HỢP 2: Sửa một phần trong paragraph
-        // Tìm vị trí chính xác và giữ beforeText/afterText
-        const regex = new RegExp(
-            originalText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'),
-            'i'
-        );
-        const match = fullText.match(regex);
+        // Fallback: nếu không match regex chính xác, thử dùng normalized matching
+        // Tìm vị trí trong normalized text
+        const normalizedFullText = normalizeText(fullText);
+        const normalizedSearch = normalizeText(originalText);
+        const normalizedIdx = normalizedFullText.indexOf(normalizedSearch);
 
-        if (!match || match.index === undefined) {
-            // Fallback: thay thế toàn bộ
-            console.log(`📝 Fallback: thay thế toàn bộ paragraph`);
-            newRuns = `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(replacementText)}</w:t></w:r>`;
-        } else {
-            const startIndex = match.index;
-            const endIndex = startIndex + match[0].length;
+        if (normalizedIdx >= 0) {
+            // Ước lượng vị trí tương đương trong fullText gốc
+            // Tính tỷ lệ vị trí
+            const ratio = normalizedIdx / normalizedFullText.length;
+            const approxStart = Math.floor(ratio * fullText.length);
+            const approxEnd = Math.min(approxStart + originalText.length + 20, fullText.length);
 
-            const beforeText = fullText.substring(0, startIndex);
-            const afterText = fullText.substring(endIndex);
+            // Tìm ranh giới từ gần nhất
+            let bestStart = approxStart;
+            let bestEnd = Math.min(approxEnd, fullText.length);
 
-            console.log(`📝 Sửa một phần: before=${beforeText.length}, after=${afterText.length}`);
+            // Tìm khoảng trắng gần nhất làm ranh giới
+            for (let i = approxStart; i >= Math.max(0, approxStart - 10); i--) {
+                if (fullText[i] === ' ' || i === 0) {
+                    bestStart = i === 0 ? 0 : i + 1;
+                    break;
+                }
+            }
 
-            // Run 1: Text trước đoạn cần sửa (nếu có)
-            if (beforeText.trim()) {
+            const beforeText = fullText.substring(0, bestStart);
+            const afterText = fullText.substring(bestEnd);
+
+            console.log(`📝 Fallback normalized match: before=${beforeText.length}, after=${afterText.length}`);
+
+            if (beforeText) {
                 newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(beforeText)}</w:t></w:r>`;
             }
-
-            // Run 2: Text đã sửa - MÀU ĐỎ
             newRuns += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(replacementText)}</w:t></w:r>`;
-
-            // Run 3: Text sau đoạn cần sửa (nếu có)
-            if (afterText.trim()) {
+            if (afterText) {
                 newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(afterText)}</w:t></w:r>`;
             }
+        } else {
+            // Final fallback: Chỉ thay thế phần text, không xóa toàn bộ paragraph
+            console.log(`📝 Final fallback: giữ nguyên paragraph, chỉ đổi nội dung text`);
+            newRuns = `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(replacementText)}</w:t></w:r>`;
         }
     }
 
@@ -180,8 +203,9 @@ const findAndReplaceInDocument = (
         }
     }
 
-    // Regex để tìm cả paragraphs và table cells
-    const elementRegex = /<w:p\b[^>]*>[\s\S]*?<\/w:p>|<w:tc\b[^>]*>[\s\S]*?<\/w:tc>/g;
+    // Regex để tìm paragraphs (không match nested - chỉ match <w:p> không chứa <w:p> bên trong)
+    // Sử dụng negative lookahead để tránh match quá rộng qua nhiều paragraphs
+    const elementRegex = /<w:p\b[^>]*>(?:(?!<w:p\b)[\s\S])*?<\/w:p>/g;
     let match;
     let modifiedXml = documentXml;
     let replaced = false;
