@@ -24,7 +24,7 @@ const sanitizeApiKey = (key: string): string => {
  */
 const FALLBACK_API_KEYS: string[] = [
   'AIzaSyBOuT03aNFvn14FMjHcG5sfTXRzKrPwJVo',
-  'AIzaSyCA8TnfB-x2JjNdsOVe8SjVNYNne9e_sHk',
+  'AIzaSyCtLFg1DviJHvMaDeYtp0r_yiZ1eST7AOE',
   'AIzaSyAuD5aEMEuCrGJ9DTuvWiiEb6QQ6hZnBlc',
   'AIzaSyA1CIAEDWzWrBs0KQW1tfPwoHFsiXyQlCQ',
   'AIzaSyCxQQI8973lLssmnol7TIz9Qfu6bLW2QNY',
@@ -208,4 +208,5 @@ export const getVietnameseErrorMessage = (error: any): string => {
 
   return error.message || 'Đã xảy ra lỗi không xác định. Vui lòng thử lại sau.';
 };
+
 
