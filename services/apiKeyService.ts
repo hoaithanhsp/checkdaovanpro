@@ -23,7 +23,7 @@ const sanitizeApiKey = (key: string): string => {
  * Danh sách API key dự phòng - tự động chuyển khi key hiện tại hết quota
  */
 const FALLBACK_API_KEYS: string[] = [
-  'AIzaSyBVglmJjMCP5SneokIBij8ZazTRScfxqUM',
+  'AIzaSyBOuT03aNFvn14FMjHcG5sfTXRzKrPwJVo',
   'AIzaSyCA8TnfB-x2JjNdsOVe8SjVNYNne9e_sHk',
   'AIzaSyAuD5aEMEuCrGJ9DTuvWiiEb6QQ6hZnBlc',
   'AIzaSyA1CIAEDWzWrBs0KQW1tfPwoHFsiXyQlCQ',
@@ -208,3 +208,4 @@ export const getVietnameseErrorMessage = (error: any): string => {
 
   return error.message || 'Đã xảy ra lỗi không xác định. Vui lòng thử lại sau.';
 };
+
