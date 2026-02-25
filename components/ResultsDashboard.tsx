@@ -14,6 +14,7 @@ import ChecklistPanel from './ChecklistPanel';
 import ReferencesPanel from './ReferencesPanel';
 import SharePanel from './SharePanel';
 import AutoFixPanel from './AutoFixPanel';
+import AnalysisDashboard from './AnalysisDashboard';
 
 interface ResultsDashboardProps {
   result: AnalysisResult;
@@ -185,6 +186,9 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
           </div>
         </div>
       </div>
+
+      {/* Analysis Dashboard - Visual Overview */}
+      <AnalysisDashboard result={result} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 

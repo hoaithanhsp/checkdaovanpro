@@ -148,8 +148,33 @@ const RESPONSE_SCHEMA: Schema = {
       },
     },
     overallConclusion: { type: Type.STRING, description: "Kết luận tổng quan và lời khuyên cuối cùng" },
+    structure: {
+      type: Type.OBJECT,
+      description: "Kiểm tra cấu trúc SKKN có đầy đủ các phần không",
+      properties: {
+        hasIntro: { type: Type.BOOLEAN, description: "Có phần Đặt vấn đề / Mở đầu không" },
+        hasTheory: { type: Type.BOOLEAN, description: "Có phần Cơ sở lý luận không" },
+        hasReality: { type: Type.BOOLEAN, description: "Có phần Thực trạng không" },
+        hasSolution: { type: Type.BOOLEAN, description: "Có phần Giải pháp / Biện pháp không" },
+        hasResult: { type: Type.BOOLEAN, description: "Có phần Kết quả không" },
+        hasConclusion: { type: Type.BOOLEAN, description: "Có phần Kết luận không" },
+        missing: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Danh sách các phần bị thiếu (tiếng Anh: intro, theory, reality, solution, result, conclusion)" },
+      },
+    },
+    qualityCriteria: {
+      type: Type.ARRAY,
+      description: "Điểm chi tiết từng tiêu chí chất lượng (8-10 tiêu chí), mỗi tiêu chí chấm 0-10",
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          criteria: { type: Type.STRING, description: "Tên tiêu chí (VD: Cấu trúc, Lý luận, Số liệu, Khả thi, PPNC, Ngôn ngữ, Thực tiễn, Tính mới, Nhân rộng, Hình thức)" },
+          score: { type: Type.NUMBER, description: "Điểm từ 0-10" },
+          comment: { type: Type.STRING, description: "Nhận xét ngắn gọn" },
+        },
+      },
+    },
   },
-  required: ["duplicateLevel", "duplicateDetails", "spellingErrors", "plagiarismRisk", "plagiarismSegments", "scores", "scoreDetails", "developmentPlan", "overallConclusion"],
+  required: ["duplicateLevel", "duplicateDetails", "spellingErrors", "plagiarismRisk", "plagiarismSegments", "scores", "scoreDetails", "developmentPlan", "overallConclusion", "structure", "qualityCriteria"],
 };
 
 // Fallback models theo thứ tự ưu tiên

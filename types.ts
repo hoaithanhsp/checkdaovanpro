@@ -58,6 +58,22 @@ export interface Scores {
   total: number;
 }
 
+export interface SKKNStructure {
+  hasIntro: boolean;
+  hasTheory: boolean;
+  hasReality: boolean;
+  hasSolution: boolean;
+  hasResult: boolean;
+  hasConclusion: boolean;
+  missing: string[];
+}
+
+export interface QualityCriterion {
+  criteria: string;
+  score: number;
+  comment: string;
+}
+
 export interface AnalysisResult {
   duplicateLevel: string;
   duplicateDetails: string;
@@ -68,6 +84,8 @@ export interface AnalysisResult {
   scoreDetails: ScoreDetail[];
   developmentPlan: DevelopmentPlan;
   overallConclusion: string;
+  structure?: SKKNStructure;
+  qualityCriteria?: QualityCriterion[];
 }
 
 /**

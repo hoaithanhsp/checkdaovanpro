@@ -1,6 +1,7 @@
 /**
  * API Key Management Service
  * Quản lý API key với tự động xoay key dự phòng khi hết quota
+ * Keys được đọc từ biến môi trường VITE_GEMINI_API_KEYS (file .env)
  */
 
 const STORAGE_KEY = 'skkn-gemini-api-key';
@@ -8,43 +9,41 @@ const MODEL_STORAGE_KEY = 'skkn-gemini-model';
 
 /**
  * Làm sạch API key - loại bỏ khoảng trắng, ký tự Unicode ẩn, BOM
- * Tránh lỗi "String contains non ISO-8859-1 code point" khi gửi HTTP request
  */
 const sanitizeApiKey = (key: string): string => {
   if (!key) return '';
-  // Loại bỏ BOM, zero-width characters, khoảng trắng đầu/cuối
   return key
-    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '') // zero-width chars, BOM, nbsp
-    .replace(/[^\x20-\x7E]/g, '') // chỉ giữ ký tự ASCII printable
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+    .replace(/[^\x20-\x7E]/g, '')
     .trim();
 };
 
 /**
- * Danh sách API key dự phòng - tự động chuyển khi key hiện tại hết quota
+ * Đọc danh sách API keys từ biến môi trường VITE_GEMINI_API_KEYS
+ * Keys được phân tách bằng dấu phẩy trong file .env
  */
-export const FALLBACK_API_KEYS: string[] = [
-  'AIzaSyBVglmJjMCP5SneokIBij8ZazTRScfxqUM',
-  'AIzaSyCA8TnfB-x2JjNdsOVe8SjVNYNne9e_sHk',
-  'AIzaSyAuD5aEMEuCrGJ9DTuvWiiEb6QQ6hZnBlc',
-  'AIzaSyA1CIAEDWzWrBs0KQW1tfPwoHFsiXyQlCQ',
-  'AIzaSyCxQQI8973lLssmnol7TIz9Qfu6bLW2QNY',
-  'AIzaSyBOuT03aNFvn14FMjHcG5sfTXRzKrPwJVo',
-  'AIzaSyCtLFg1DviJHvMaDeYtp0r_yiZ1eST7AOE',
-  'AIzaSyDURc9bScGglKGZee2-NikG-8prgVduKNk',
-  'AIzaSyAi1mM3-fGRoTqcbGlamka5SRAGUr9HF9Y',
-  'AIzaSyB4YLqOkzfd7xEliQSarXJAhi1Rll2zoFs',
-  'AIzaSyAE_RL_mpL_5pdVJ4w--jzTkEtTlAEcono',
-  'AIzaSyBsCkGTO9PkX2le8lJuNpTA9pUwKPREQWs',
-];
+const getEnvApiKeys = (): string[] => {
+  const raw = import.meta.env.VITE_GEMINI_API_KEYS || '';
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map((k: string) => sanitizeApiKey(k))
+    .filter((k: string) => k.length > 0);
+};
 
-// Track key hiện tại đang dùng trong phiên: -1 = key user, 0..N = fallback index
+/**
+ * Danh sách API key dự phòng - đọc từ biến môi trường
+ */
+export const ENV_API_KEYS: string[] = getEnvApiKeys();
+
+// Track key hiện tại đang dùng trong phiên: -1 = key user, 0..N = env key index
 let currentFallbackIndex = -1;
 
 // Các key đã hết quota trong phiên này
 const exhaustedKeys = new Set<string>();
 
 /**
- * Lấy API key hiện tại
+ * Lấy API key do người dùng tự nhập (từ localStorage)
  */
 export const getApiKey = (): string => {
   const raw = localStorage.getItem(STORAGE_KEY) || '';
@@ -52,11 +51,10 @@ export const getApiKey = (): string => {
 };
 
 /**
- * Lưu API key
+ * Lưu API key do người dùng nhập
  */
 export const saveApiKey = (key: string): void => {
   localStorage.setItem(STORAGE_KEY, sanitizeApiKey(key));
-  // Reset lại trạng thái xoay key khi user lưu key mới
   currentFallbackIndex = -1;
   exhaustedKeys.clear();
 };
@@ -76,17 +74,17 @@ export const saveSelectedModel = (model: string): void => {
 };
 
 /**
- * Kiểm tra xem có API key không (bao gồm cả fallback)
+ * Kiểm tra xem có API key không (user key hoặc env keys)
  */
 export const hasAnyKey = (): boolean => {
   const userKey = getApiKey();
   if (userKey.length > 0) return true;
-  // Nếu user chưa nhập key thì dùng fallback
-  return FALLBACK_API_KEYS.some(k => !exhaustedKeys.has(k));
+  // Kiểm tra env keys
+  return ENV_API_KEYS.some(k => !exhaustedKeys.has(k));
 };
 
 /**
- * Xóa API key
+ * Xóa API key người dùng
  */
 export const clearApiKey = (): void => {
   localStorage.removeItem(STORAGE_KEY);
@@ -101,11 +99,11 @@ export const markKeyExhausted = (key: string): void => {
 };
 
 /**
- * Lấy API key hiện tại đang hoạt động (user key hoặc fallback)
- * Bỏ qua các key đã hết quota
+ * Lấy API key hiện tại đang hoạt động
+ * Ưu tiên: key user (nếu có) → env keys (xoay vòng)
  */
 export const getCurrentActiveKey = (): string => {
-  // Nếu đang dùng key user và chưa bị exhausted
+  // Ưu tiên key user trước
   if (currentFallbackIndex === -1) {
     const userKey = getApiKey();
     if (userKey && !exhaustedKeys.has(userKey)) {
@@ -113,41 +111,38 @@ export const getCurrentActiveKey = (): string => {
     }
   }
 
-  // Tìm fallback key chưa hết quota, bắt đầu từ index hiện tại
+  // Dùng env keys
   const startIndex = currentFallbackIndex === -1 ? 0 : currentFallbackIndex;
-  for (let i = startIndex; i < FALLBACK_API_KEYS.length; i++) {
-    if (!exhaustedKeys.has(FALLBACK_API_KEYS[i])) {
+  for (let i = startIndex; i < ENV_API_KEYS.length; i++) {
+    if (!exhaustedKeys.has(ENV_API_KEYS[i])) {
       currentFallbackIndex = i;
-      return FALLBACK_API_KEYS[i];
+      return ENV_API_KEYS[i];
     }
   }
 
-  // Không tìm thấy key nào
   return '';
 };
 
 /**
- * Chuyển sang API key dự phòng tiếp theo
- * Trả về key mới hoặc rỗng nếu đã hết key
+ * Chuyển sang API key tiếp theo
  */
 export const getNextApiKey = (): string => {
   const startIndex = currentFallbackIndex + 1;
 
-  for (let i = startIndex; i < FALLBACK_API_KEYS.length; i++) {
-    if (!exhaustedKeys.has(FALLBACK_API_KEYS[i])) {
+  for (let i = startIndex; i < ENV_API_KEYS.length; i++) {
+    if (!exhaustedKeys.has(ENV_API_KEYS[i])) {
       currentFallbackIndex = i;
-      console.log(`🔄 Tự động chuyển sang API key dự phòng #${i + 1} (...${FALLBACK_API_KEYS[i].slice(-6)})`);
-      return FALLBACK_API_KEYS[i];
+      console.log(`🔄 Tự động chuyển sang API key dự phòng #${i + 1} (...${ENV_API_KEYS[i].slice(-6)})`);
+      return ENV_API_KEYS[i];
     }
   }
 
-  // Đã thử hết tất cả key
   console.warn('⚠️ Tất cả API key dự phòng đều đã hết quota!');
   return '';
 };
 
 /**
- * Reset trạng thái xoay key (gọi khi reload app hoặc sau 1 khoảng thời gian)
+ * Reset trạng thái xoay key
  */
 export const resetKeyRotation = (): void => {
   currentFallbackIndex = -1;
@@ -159,10 +154,8 @@ export const resetKeyRotation = (): void => {
  */
 export const isQuotaOrRateLimitError = (error: any): boolean => {
   if (!error) return false;
-
   const message = error.message?.toLowerCase() || '';
   const status = error.status || error.code;
-
   return (
     status === 429 ||
     status === 503 ||
@@ -179,10 +172,8 @@ export const isQuotaOrRateLimitError = (error: any): boolean => {
  */
 export const isInvalidKeyError = (error: any): boolean => {
   if (!error) return false;
-
   const message = error.message?.toLowerCase() || '';
   const status = error.status || error.code;
-
   return (
     status === 401 ||
     status === 403 ||
@@ -193,7 +184,7 @@ export const isInvalidKeyError = (error: any): boolean => {
 };
 
 /**
- * Tạo thông báo lỗi tiếng Việt dễ hiểu
+ * Tạo thông báo lỗi tiếng Việt
  */
 export const getVietnameseErrorMessage = (error: any): string => {
   if (isQuotaOrRateLimitError(error)) {

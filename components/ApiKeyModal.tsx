@@ -6,7 +6,7 @@ import {
     getSelectedModel,
     saveSelectedModel,
     hasAnyKey,
-    FALLBACK_API_KEYS,
+    ENV_API_KEYS,
 } from '../services/apiKeyService';
 
 /** Ẩn API key, chỉ hiện 4 ký tự đầu + 4 ký tự cuối */
@@ -46,9 +46,9 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
     const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
     const [error, setError] = useState('');
     const [showKey, setShowKey] = useState(false);
-    const [selectedPresetIndex, setSelectedPresetIndex] = useState<number | null>(null);
-    const [showPresetList, setShowPresetList] = useState(true);
-    const [inputMode, setInputMode] = useState<'preset' | 'manual'>('preset');
+    const [inputMode, setInputMode] = useState<'env' | 'manual'>('env');
+
+    const hasEnvKeys = ENV_API_KEYS.length > 0;
 
     useEffect(() => {
         if (isOpen) {
@@ -56,45 +56,37 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
             setApiKeyInput(currentKey);
             setSelectedModel(getSelectedModel());
             setError('');
-            // Kiểm tra xem key hiện tại có trong danh sách preset không
-            const presetIdx = FALLBACK_API_KEYS.findIndex(k => k === currentKey);
-            if (presetIdx >= 0) {
-                setSelectedPresetIndex(presetIdx);
-                setInputMode('preset');
+            // Nếu chưa có key user nhập → mặc định dùng env
+            if (!currentKey && hasEnvKeys) {
+                setInputMode('env');
             } else if (currentKey) {
-                setSelectedPresetIndex(null);
                 setInputMode('manual');
             } else {
-                setSelectedPresetIndex(null);
-                setInputMode('preset');
+                setInputMode('manual');
             }
         }
     }, [isOpen]);
 
-    const handleSelectPreset = (index: number) => {
-        setSelectedPresetIndex(index);
-        setApiKeyInput(FALLBACK_API_KEYS[index]);
-        setError('');
-        setInputMode('preset');
-    };
-
     const handleSwitchToManual = () => {
         setInputMode('manual');
-        setSelectedPresetIndex(null);
         setApiKeyInput('');
         setError('');
     };
 
     const handleSave = () => {
-        let key = '';
-        if (inputMode === 'preset' && selectedPresetIndex !== null) {
-            key = FALLBACK_API_KEYS[selectedPresetIndex];
-        } else {
-            key = apiKeyInput.trim();
+        if (inputMode === 'env' && hasEnvKeys) {
+            // Dùng env keys → xóa key user để hệ thống tự dùng env keys
+            saveApiKey('');
+            saveSelectedModel(selectedModel);
+            onSave('', selectedModel);
+            onClose();
+            return;
         }
 
+        // Manual mode
+        const key = apiKeyInput.trim();
         if (!key) {
-            setError(inputMode === 'preset' ? 'Vui lòng chọn một API Key từ danh sách' : 'Vui lòng nhập API Key');
+            setError('Vui lòng nhập API Key');
             return;
         }
         if (!key.startsWith('AIza')) {
@@ -143,63 +135,50 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
 
                         {/* Tab chuyển đổi */}
                         <div className="flex rounded-lg bg-gray-100 p-1 mb-4">
-                            <button
-                                type="button"
-                                onClick={() => { setInputMode('preset'); setError(''); }}
-                                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${inputMode === 'preset'
+                            {hasEnvKeys && (
+                                <button
+                                    type="button"
+                                    onClick={() => { setInputMode('env'); setError(''); }}
+                                    className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${inputMode === 'env'
                                         ? 'bg-white text-blue-600 shadow-sm'
                                         : 'text-gray-500 hover:text-gray-700'
-                                    }`}
-                            >
-                                🔑 Chọn Key có sẵn
-                            </button>
+                                        }`}
+                                >
+                                    🔑 Dùng Key hệ thống
+                                </button>
+                            )}
                             <button
                                 type="button"
                                 onClick={handleSwitchToManual}
                                 className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${inputMode === 'manual'
-                                        ? 'bg-white text-blue-600 shadow-sm'
-                                        : 'text-gray-500 hover:text-gray-700'
+                                    ? 'bg-white text-blue-600 shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
                                     }`}
                             >
                                 ✏️ Nhập Key riêng
                             </button>
                         </div>
 
-                        {/* Preset API Key List */}
-                        {inputMode === 'preset' && (
-                            <div>
-                                <div
-                                    className="flex items-center justify-between cursor-pointer mb-2"
-                                    onClick={() => setShowPresetList(!showPresetList)}
-                                >
-                                    <span className="text-xs text-gray-500">
-                                        Có {FALLBACK_API_KEYS.length} key sẵn sàng sử dụng
-                                    </span>
-                                    {showPresetList ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                        {/* Env Keys Mode */}
+                        {inputMode === 'env' && hasEnvKeys && (
+                            <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                                <div className="flex items-center gap-2 text-green-700 mb-2">
+                                    <Check size={18} />
+                                    <span className="font-semibold text-sm">Hệ thống đã được cấu hình sẵn API Keys</span>
                                 </div>
-                                {showPresetList && (
-                                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin' }}>
-                                        {FALLBACK_API_KEYS.map((key, index) => (
-                                            <label
-                                                key={index}
-                                                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border-2 cursor-pointer transition-all text-sm ${selectedPresetIndex === index
-                                                        ? 'border-blue-500 bg-blue-50'
-                                                        : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50'
-                                                    }`}
-                                                onClick={() => handleSelectPreset(index)}
-                                            >
-                                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${selectedPresetIndex === index ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
-                                                    }`}>
-                                                    {selectedPresetIndex === index && <Check size={10} className="text-white" />}
-                                                </div>
-                                                <span className="font-mono text-gray-600 truncate">
-                                                    {maskKey(key)}
-                                                </span>
-                                                <span className="text-xs text-gray-400 flex-shrink-0">#{index + 1}</span>
-                                            </label>
-                                        ))}
-                                    </div>
-                                )}
+                                <p className="text-green-600 text-sm">
+                                    App sẽ tự động sử dụng {ENV_API_KEYS.length} key có sẵn. Khi một key hết quota,
+                                    hệ thống sẽ tự động chuyển sang key tiếp theo.
+                                </p>
+                                <div className="mt-3 space-y-1">
+                                    {ENV_API_KEYS.map((key, index) => (
+                                        <div key={index} className="flex items-center gap-2 text-xs text-green-600">
+                                            <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                                            <span className="font-mono">{maskKey(key)}</span>
+                                            <span className="text-green-400">#{index + 1}</span>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         )}
 
