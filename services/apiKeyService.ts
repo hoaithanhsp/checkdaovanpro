@@ -22,13 +22,19 @@ const sanitizeApiKey = (key: string): string => {
 /**
  * Danh sách API key dự phòng - tự động chuyển khi key hiện tại hết quota
  */
-const FALLBACK_API_KEYS: string[] = [
-  'AIzaSyBOuT03aNFvn14FMjHcG5sfTXRzKrPwJVo',
-  'AIzaSyCtLFg1DviJHvMaDeYtp0r_yiZ1eST7AOE',
+export const FALLBACK_API_KEYS: string[] = [
+  'AIzaSyBVglmJjMCP5SneokIBij8ZazTRScfxqUM',
+  'AIzaSyCA8TnfB-x2JjNdsOVe8SjVNYNne9e_sHk',
   'AIzaSyAuD5aEMEuCrGJ9DTuvWiiEb6QQ6hZnBlc',
   'AIzaSyA1CIAEDWzWrBs0KQW1tfPwoHFsiXyQlCQ',
   'AIzaSyCxQQI8973lLssmnol7TIz9Qfu6bLW2QNY',
-  'AIzaSyAVOJQb1eUQRNpdQAz3UuZ4CAMpcj0eaDc',
+  'AIzaSyBOuT03aNFvn14FMjHcG5sfTXRzKrPwJVo',
+  'AIzaSyCtLFg1DviJHvMaDeYtp0r_yiZ1eST7AOE',
+  'AIzaSyDURc9bScGglKGZee2-NikG-8prgVduKNk',
+  'AIzaSyAi1mM3-fGRoTqcbGlamka5SRAGUr9HF9Y',
+  'AIzaSyB4YLqOkzfd7xEliQSarXJAhi1Rll2zoFs',
+  'AIzaSyAE_RL_mpL_5pdVJ4w--jzTkEtTlAEcono',
+  'AIzaSyBsCkGTO9PkX2le8lJuNpTA9pUwKPREQWs',
 ];
 
 // Track key hiện tại đang dùng trong phiên: -1 = key user, 0..N = fallback index
@@ -208,5 +214,3 @@ export const getVietnameseErrorMessage = (error: any): string => {
 
   return error.message || 'Đã xảy ra lỗi không xác định. Vui lòng thử lại sau.';
 };
-
-
