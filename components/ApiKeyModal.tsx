@@ -1,12 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { X, Key, ExternalLink, Check, AlertCircle, Settings } from 'lucide-react';
+import { X, Key, ExternalLink, Check, AlertCircle, Settings, ChevronDown, ChevronUp } from 'lucide-react';
 import {
     getApiKey,
     saveApiKey,
     getSelectedModel,
     saveSelectedModel,
     hasAnyKey,
+    FALLBACK_API_KEYS,
 } from '../services/apiKeyService';
+
+/** Ẩn API key, chỉ hiện 4 ký tự đầu + 4 ký tự cuối */
+const maskKey = (key: string): string => {
+    if (key.length <= 10) return '••••••••••';
+    return key.slice(0, 4) + '••••••••••••••••••••••••••••••••' + key.slice(-4);
+};
 
 interface ApiKeyModalProps {
     isOpen: boolean;
@@ -39,20 +46,55 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
     const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
     const [error, setError] = useState('');
     const [showKey, setShowKey] = useState(false);
+    const [selectedPresetIndex, setSelectedPresetIndex] = useState<number | null>(null);
+    const [showPresetList, setShowPresetList] = useState(true);
+    const [inputMode, setInputMode] = useState<'preset' | 'manual'>('preset');
 
     useEffect(() => {
         if (isOpen) {
-            setApiKeyInput(getApiKey());
+            const currentKey = getApiKey();
+            setApiKeyInput(currentKey);
             setSelectedModel(getSelectedModel());
             setError('');
+            // Kiểm tra xem key hiện tại có trong danh sách preset không
+            const presetIdx = FALLBACK_API_KEYS.findIndex(k => k === currentKey);
+            if (presetIdx >= 0) {
+                setSelectedPresetIndex(presetIdx);
+                setInputMode('preset');
+            } else if (currentKey) {
+                setSelectedPresetIndex(null);
+                setInputMode('manual');
+            } else {
+                setSelectedPresetIndex(null);
+                setInputMode('preset');
+            }
         }
     }, [isOpen]);
 
+    const handleSelectPreset = (index: number) => {
+        setSelectedPresetIndex(index);
+        setApiKeyInput(FALLBACK_API_KEYS[index]);
+        setError('');
+        setInputMode('preset');
+    };
+
+    const handleSwitchToManual = () => {
+        setInputMode('manual');
+        setSelectedPresetIndex(null);
+        setApiKeyInput('');
+        setError('');
+    };
+
     const handleSave = () => {
-        const key = apiKeyInput.trim();
+        let key = '';
+        if (inputMode === 'preset' && selectedPresetIndex !== null) {
+            key = FALLBACK_API_KEYS[selectedPresetIndex];
+        } else {
+            key = apiKeyInput.trim();
+        }
 
         if (!key) {
-            setError('Vui lòng nhập API Key');
+            setError(inputMode === 'preset' ? 'Vui lòng chọn một API Key từ danh sách' : 'Vui lòng nhập API Key');
             return;
         }
         if (!key.startsWith('AIza')) {
@@ -93,27 +135,94 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
 
                 {/* Content */}
                 <div className="p-6 space-y-6">
-                    {/* API Key Input */}
+                    {/* API Key Section */}
                     <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <label className="block text-sm font-semibold text-gray-700 mb-3">
                             Google Gemini API Key
                         </label>
-                        <div className="relative">
-                            <input
-                                type={showKey ? 'text' : 'password'}
-                                value={apiKeyInput}
-                                onChange={(e) => { setApiKeyInput(e.target.value); setError(''); }}
-                                placeholder="AIza..."
-                                className="w-full px-4 py-3 pr-20 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-400 text-sm font-mono"
-                            />
+
+                        {/* Tab chuyển đổi */}
+                        <div className="flex rounded-lg bg-gray-100 p-1 mb-4">
                             <button
                                 type="button"
-                                onClick={() => setShowKey(!showKey)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-sm"
+                                onClick={() => { setInputMode('preset'); setError(''); }}
+                                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${inputMode === 'preset'
+                                        ? 'bg-white text-blue-600 shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                    }`}
                             >
-                                {showKey ? 'Ẩn' : 'Hiện'}
+                                🔑 Chọn Key có sẵn
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSwitchToManual}
+                                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${inputMode === 'manual'
+                                        ? 'bg-white text-blue-600 shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                ✏️ Nhập Key riêng
                             </button>
                         </div>
+
+                        {/* Preset API Key List */}
+                        {inputMode === 'preset' && (
+                            <div>
+                                <div
+                                    className="flex items-center justify-between cursor-pointer mb-2"
+                                    onClick={() => setShowPresetList(!showPresetList)}
+                                >
+                                    <span className="text-xs text-gray-500">
+                                        Có {FALLBACK_API_KEYS.length} key sẵn sàng sử dụng
+                                    </span>
+                                    {showPresetList ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                                </div>
+                                {showPresetList && (
+                                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin' }}>
+                                        {FALLBACK_API_KEYS.map((key, index) => (
+                                            <label
+                                                key={index}
+                                                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border-2 cursor-pointer transition-all text-sm ${selectedPresetIndex === index
+                                                        ? 'border-blue-500 bg-blue-50'
+                                                        : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50'
+                                                    }`}
+                                                onClick={() => handleSelectPreset(index)}
+                                            >
+                                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${selectedPresetIndex === index ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                                                    }`}>
+                                                    {selectedPresetIndex === index && <Check size={10} className="text-white" />}
+                                                </div>
+                                                <span className="font-mono text-gray-600 truncate">
+                                                    {maskKey(key)}
+                                                </span>
+                                                <span className="text-xs text-gray-400 flex-shrink-0">#{index + 1}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Manual API Key Input */}
+                        {inputMode === 'manual' && (
+                            <div className="relative">
+                                <input
+                                    type={showKey ? 'text' : 'password'}
+                                    value={apiKeyInput}
+                                    onChange={(e) => { setApiKeyInput(e.target.value); setError(''); }}
+                                    placeholder="AIza..."
+                                    className="w-full px-4 py-3 pr-20 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-400 text-sm font-mono"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowKey(!showKey)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-sm"
+                                >
+                                    {showKey ? 'Ẩn' : 'Hiện'}
+                                </button>
+                            </div>
+                        )}
+
                         {error && (
                             <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
                                 <AlertCircle size={14} /> {error}
