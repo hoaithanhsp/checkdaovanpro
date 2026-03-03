@@ -31,6 +31,13 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
   const [showShare, setShowShare] = useState(false);
   const [showAutoFix, setShowAutoFix] = useState(false);
 
+  // Safe defaults cho các trường mảng có thể undefined từ API
+  const spellingErrors = result.spellingErrors || [];
+  const plagiarismSegments = result.plagiarismSegments || [];
+  const scoreDetails = result.scoreDetails || [];
+  const developmentPlan = result.developmentPlan || { shortTerm: [], mediumTerm: [], longTerm: [] };
+  const scores = result.scores || { innovation: 0, feasibility: 0, scientific: 0, presentation: 0, total: 0 };
+
   const handleExportWord = async () => {
     if (!input) {
       alert('Không có dữ liệu đầu vào để xuất báo cáo');
@@ -48,10 +55,10 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
   };
 
   const scoreData = [
-    { name: 'Tính Mới', value: result.scores.innovation, fullMark: 30, fill: '#3B82F6' },
-    { name: 'Khả Thi', value: result.scores.feasibility, fullMark: 40, fill: '#10B981' },
-    { name: 'Khoa Học', value: result.scores.scientific, fullMark: 20, fill: '#8B5CF6' },
-    { name: 'Hình Thức', value: result.scores.presentation, fullMark: 10, fill: '#F59E0B' },
+    { name: 'Tính Mới', value: scores.innovation, fullMark: 30, fill: '#3B82F6' },
+    { name: 'Khả Thi', value: scores.feasibility, fullMark: 40, fill: '#10B981' },
+    { name: 'Khoa Học', value: scores.scientific, fullMark: 20, fill: '#8B5CF6' },
+    { name: 'Hình Thức', value: scores.presentation, fullMark: 10, fill: '#F59E0B' },
   ];
 
   const getRiskColor = (risk: string) => {
@@ -121,7 +128,7 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
         <div className="flex items-center gap-4">
           <div className="text-right">
             <p className="text-sm text-gray-500 uppercase font-semibold">Tổng điểm dự kiến</p>
-            <p className="text-5xl font-black text-blue-600">{result.scores.total}<span className="text-2xl text-gray-400">/100</span></p>
+            <p className="text-5xl font-black text-blue-600">{scores.total}<span className="text-2xl text-gray-400">/100</span></p>
           </div>
           <div className="h-16 w-px bg-gray-200"></div>
           {/* Checklist Button */}
@@ -237,17 +244,17 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
             <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
               <AlertOctagon size={20} /> Nguy cơ đạo văn: {result.plagiarismRisk}
             </h3>
-            <p className="text-sm opacity-90">Phát hiện {result.plagiarismSegments.length} đoạn văn bản có nguy cơ cao.</p>
+            <p className="text-sm opacity-90">Phát hiện {plagiarismSegments.length} đoạn văn bản có nguy cơ cao.</p>
           </div>
 
           {/* Plagiarism Segments with Rewrite */}
-          {result.plagiarismSegments.length > 0 && (
+          {plagiarismSegments.length > 0 && (
             <div className="bg-white rounded-2xl shadow-lg p-6">
               <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
                 <AlertTriangle className="text-red-500" /> Đoạn văn cần xem xét
               </h3>
               <div className="space-y-4">
-                {result.plagiarismSegments.map((seg, idx) => (
+                {plagiarismSegments.map((seg, idx) => (
                   <div key={idx} className="bg-red-50 border border-red-200 rounded-lg p-4">
                     <p className="text-gray-800 italic mb-2">"{seg.segment}"</p>
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -283,7 +290,7 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
               <TrendingUp className="text-indigo-500" /> Chi tiết đánh giá
             </h3>
             <div className="space-y-4">
-              {result.scoreDetails.map((detail, idx) => (
+              {scoreDetails.map((detail, idx) => (
                 <div key={idx} className="border-b border-gray-100 last:border-0 pb-4 last:pb-0">
                   <h4 className="font-bold text-gray-700 mb-1">{detail.category}</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -302,11 +309,11 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
           {/* Spelling & Grammar */}
           <div className="bg-white rounded-2xl shadow-lg p-6">
             <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <BookOpen className="text-orange-500" /> Lỗi Chính tả & Diễn đạt ({result.spellingErrors.length})
+              <BookOpen className="text-orange-500" /> Lỗi Chính tả & Diễn đạt ({spellingErrors.length})
             </h3>
-            {result.spellingErrors.length > 0 ? (
+            {spellingErrors.length > 0 ? (
               <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
-                {result.spellingErrors.map((err, idx) => (
+                {spellingErrors.map((err, idx) => (
                   <div key={idx} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg group hover:bg-orange-50 transition-colors">
                     <span className="bg-orange-200 text-orange-800 text-xs font-bold px-2 py-1 rounded mt-0.5">{err.type}</span>
                     <div className="text-sm">
@@ -330,19 +337,19 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
               <div className="bg-white/10 p-4 rounded-xl backdrop-blur-sm border border-white/10">
                 <h4 className="font-bold text-yellow-300 mb-3 border-b border-white/20 pb-2">Ngắn hạn (1-2 tuần)</h4>
                 <ul className="list-disc list-inside space-y-2 text-sm text-indigo-100">
-                  {result.developmentPlan.shortTerm.map((item, i) => <li key={i}>{item}</li>)}
+                  {(developmentPlan.shortTerm || []).map((item, i) => <li key={i}>{item}</li>)}
                 </ul>
               </div>
               <div className="bg-white/10 p-4 rounded-xl backdrop-blur-sm border border-white/10">
                 <h4 className="font-bold text-blue-300 mb-3 border-b border-white/20 pb-2">Trung hạn (1 tháng)</h4>
                 <ul className="list-disc list-inside space-y-2 text-sm text-indigo-100">
-                  {result.developmentPlan.mediumTerm.map((item, i) => <li key={i}>{item}</li>)}
+                  {(developmentPlan.mediumTerm || []).map((item, i) => <li key={i}>{item}</li>)}
                 </ul>
               </div>
               <div className="bg-white/10 p-4 rounded-xl backdrop-blur-sm border border-white/10">
                 <h4 className="font-bold text-green-300 mb-3 border-b border-white/20 pb-2">Dài hạn (2-3 tháng)</h4>
                 <ul className="list-disc list-inside space-y-2 text-sm text-indigo-100">
-                  {result.developmentPlan.longTerm.map((item, i) => <li key={i}>{item}</li>)}
+                  {(developmentPlan.longTerm || []).map((item, i) => <li key={i}>{item}</li>)}
                 </ul>
               </div>
             </div>
