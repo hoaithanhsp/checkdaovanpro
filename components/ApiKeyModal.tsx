@@ -22,10 +22,15 @@ interface ApiKeyModalProps {
     isRequired?: boolean;
 }
 
-const MODELS = [
-    { id: 'gemini-3.0-flash', name: 'Gemini 3 Flash', description: 'Nhanh và hiệu quả', default: true },
-    { id: 'gemini-3.0-pro', name: 'Gemini 3 Pro', description: 'Mạnh mẽ và chi tiết' },
+const FREE_MODELS = [
+    { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', description: 'Nhanh và hiệu quả', default: true },
     { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Ổn định và đáng tin cậy' },
+];
+
+const PAID_MODELS = [
+    { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', description: 'Nhanh và hiệu quả', default: true },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Ổn định và đáng tin cậy' },
+    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: 'Mạnh mẽ, chi tiết, chính xác cao', paid: true },
 ];
 
 export const getStoredApiKey = (): string => {
@@ -43,7 +48,7 @@ export const saveApiKeyAndModel = (apiKey: string, model: string): void => {
 
 const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRequired = false }) => {
     const [apiKeyInput, setApiKeyInput] = useState('');
-    const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
+    const [selectedModel, setSelectedModel] = useState(FREE_MODELS[0].id);
     const [error, setError] = useState('');
     const [showKey, setShowKey] = useState(false);
     const [inputMode, setInputMode] = useState<'env' | 'manual'>('env');
@@ -213,7 +218,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
                     <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-3">Chọn Model AI</label>
                         <div className="space-y-2">
-                            {MODELS.map((model) => (
+                            {(inputMode === 'manual' ? PAID_MODELS : FREE_MODELS).map((model) => (
                                 <label
                                     key={model.id}
                                     className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${selectedModel === model.id
@@ -236,8 +241,11 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2">
                                             <span className="font-semibold text-gray-800">{model.name}</span>
-                                            {model.default && (
+                                            {(model as any).default && (
                                                 <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">Mặc định</span>
+                                            )}
+                                            {(model as any).paid && (
+                                                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">💎 Trả phí</span>
                                             )}
                                         </div>
                                         <p className="text-sm text-gray-500">{model.description}</p>
