@@ -5,7 +5,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import ErrorBoundary from './components/ErrorBoundary';
 
 // Dọn dẹp model cũ không hợp lệ trong localStorage
-const INVALID_MODELS = ['gemini-3-flash-preview', 'gemini-3-pro-preview'];
+const INVALID_MODELS = ['gemini-2.0-flash', 'gemini-3-pro-preview', 'gemini-2.5-flash-preview-05-20'];
 const savedModel = localStorage.getItem('skkn-gemini-model');
 if (savedModel && INVALID_MODELS.includes(savedModel)) {
   localStorage.removeItem('skkn-gemini-model');
