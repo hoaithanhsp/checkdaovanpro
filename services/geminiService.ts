@@ -214,16 +214,15 @@ const RESPONSE_SCHEMA: Schema = {
   required: ["duplicateLevel", "duplicateDetails", "spellingErrors", "plagiarismRisk", "plagiarismSegments", "scores", "scoreDetails", "developmentPlan", "overallConclusion", "structure", "qualityCriteria", "aiRiskScore", "aiRiskLevel", "aiRiskDetails"],
 };
 
-// Fallback models theo thứ tự ưu tiên (tên chính xác từ Google AI Studio)
+// Fallback models theo thứ tự ưu tiên
 const FALLBACK_MODELS = [
-  'gemini-3.0-flash',
+  'gemini-3-flash-preview',
   'gemini-2.5-flash',
   'gemini-2.5-pro',
-  'gemini-2.0-flash',
 ];
 
 // Model mặc định
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+const DEFAULT_MODEL = 'gemini-3-flash-preview';
 
 // Helper để lấy API key hiện tại (hỗ trợ auto-rotation)
 const getApiKeyOrThrow = (): string => {
