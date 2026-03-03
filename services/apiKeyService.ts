@@ -63,7 +63,7 @@ export const saveApiKey = (key: string): void => {
  * Lấy model đã chọn
  */
 export const getSelectedModel = (): string => {
-  return localStorage.getItem(MODEL_STORAGE_KEY) || 'gemini-3-flash-preview';
+  return localStorage.getItem(MODEL_STORAGE_KEY) || 'gemini-2.5-flash';
 };
 
 /**
@@ -156,6 +156,8 @@ export const isQuotaOrRateLimitError = (error: any): boolean => {
   if (!error) return false;
   const message = error.message?.toLowerCase() || '';
   const status = error.status || error.code;
+  // Không coi lỗi model not found là quota error
+  if (isModelNotFoundError(error)) return false;
   return (
     status === 429 ||
     status === 503 ||
@@ -164,6 +166,23 @@ export const isQuotaOrRateLimitError = (error: any): boolean => {
     message.includes('resource exhausted') ||
     message.includes('too many requests') ||
     message.includes('overloaded')
+  );
+};
+
+/**
+ * Kiểm tra lỗi model không tồn tại (404 / NOT_FOUND)
+ * Lỗi này không nên đánh dấu key hết quota
+ */
+export const isModelNotFoundError = (error: any): boolean => {
+  if (!error) return false;
+  const message = error.message?.toLowerCase() || '';
+  const status = error.status || error.code;
+  return (
+    status === 404 ||
+    message.includes('not found') ||
+    message.includes('is not found') ||
+    message.includes('model') && message.includes('not') ||
+    message.includes('models/') && message.includes('not')
   );
 };
 

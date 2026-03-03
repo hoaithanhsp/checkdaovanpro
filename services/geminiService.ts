@@ -4,6 +4,7 @@ import {
   hasAnyKey,
   isQuotaOrRateLimitError,
   isInvalidKeyError,
+  isModelNotFoundError,
   getVietnameseErrorMessage,
   getSelectedModel,
   getCurrentActiveKey,
@@ -213,15 +214,16 @@ const RESPONSE_SCHEMA: Schema = {
   required: ["duplicateLevel", "duplicateDetails", "spellingErrors", "plagiarismRisk", "plagiarismSegments", "scores", "scoreDetails", "developmentPlan", "overallConclusion", "structure", "qualityCriteria", "aiRiskScore", "aiRiskLevel", "aiRiskDetails"],
 };
 
-// Fallback models theo thứ tự ưu tiên
+// Fallback models theo thứ tự ưu tiên (tên chính xác từ Google AI Studio)
 const FALLBACK_MODELS = [
-  'gemini-3-flash-preview',
-  'gemini-3-pro-preview',
-  'gemini-2.5-flash'
+  'gemini-3.0-flash',
+  'gemini-2.5-flash',
+  'gemini-2.5-pro',
+  'gemini-2.0-flash',
 ];
 
 // Model mặc định
-const DEFAULT_MODEL = 'gemini-3-flash-preview';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 // Helper để lấy API key hiện tại (hỗ trợ auto-rotation)
 const getApiKeyOrThrow = (): string => {
@@ -284,6 +286,11 @@ export const analyzeSKKNWithGemini = async (input: SKKNInput): Promise<AnalysisR
       } catch (error: any) {
         console.warn(`Model ${model} thất bại:`, error.message);
         lastError = error;
+
+        if (isModelNotFoundError(error)) {
+          console.warn(`⚠️ Model ${model} không tồn tại, thử model khác...`);
+          continue; // Tiếp tục thử model khác, KHÔNG đánh dấu key exhausted
+        }
 
         if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
           markKeyExhausted(apiKey);
@@ -593,6 +600,11 @@ Chỉ liệt kê tối đa 10 changes quan trọng nhất.${hasAIRisk ? ' Ưu ti
       } catch (error: any) {
         console.warn(`[AutoFix] Model ${model} thất bại:`, error.message);
         lastError = error;
+
+        if (isModelNotFoundError(error)) {
+          console.warn(`⚠️ [AutoFix] Model ${model} không tồn tại, thử model khác...`);
+          continue;
+        }
 
         if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
           markKeyExhausted(apiKey);
