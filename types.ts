@@ -74,6 +74,15 @@ export interface QualityCriterion {
   comment: string;
 }
 
+export interface AIRiskDetails {
+  perplexityScore: number;
+  burstinessScore: number;
+  patternDensity: number;
+  overallAIPercent: number;
+  suspiciousPatterns: string[];
+  recommendations: string[];
+}
+
 export interface AnalysisResult {
   duplicateLevel: string;
   duplicateDetails: string;
@@ -86,6 +95,9 @@ export interface AnalysisResult {
   overallConclusion: string;
   structure?: SKKNStructure;
   qualityCriteria?: QualityCriterion[];
+  aiRiskScore?: number;
+  aiRiskLevel?: string;
+  aiRiskDetails?: AIRiskDetails;
 }
 
 /**

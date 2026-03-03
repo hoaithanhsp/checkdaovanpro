@@ -69,10 +69,21 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result }) => {
     };
     const plagiarismPercent = getPlagiarismPercent();
 
+    // AI Risk Score
+    const aiRiskPercent = result.aiRiskScore ?? 0;
+    const getAIRiskLabel = (score: number) => {
+        if (score >= 60) return { text: 'Nguy hiểm', color: '#dc2626' };
+        if (score >= 35) return { text: 'Cảnh báo', color: '#f59e0b' };
+        if (score >= 15) return { text: 'Trung bình', color: '#f97316' };
+        return { text: 'An toàn', color: '#10b981' };
+    };
+    const aiRiskLabel = getAIRiskLabel(aiRiskPercent);
+
     const radius = 52;
     const circumference = 2 * Math.PI * radius;
     const qualityOffset = circumference - (qualityScore / 100) * circumference;
     const plagiarismOffset = circumference - (plagiarismPercent / 100) * circumference;
+    const aiRiskOffset = circumference - (aiRiskPercent / 100) * circumference;
 
     return (
         <div className="analysis-dashboard-section" style={{ display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 32 }}>
@@ -83,7 +94,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result }) => {
             </div>
 
             {/* Score Cards Row */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
                 {/* Quality Score */}
                 <div style={{
                     textAlign: 'center', padding: 20, borderRadius: 16, background: '#f0fdf4',
@@ -159,6 +170,47 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result }) => {
                         border: `1px solid ${plagiarismPercent > 30 ? '#fecdd3' : '#a7f3d0'}`
                     }}>
                         {plagiarismPercent > 30 ? 'Cần giảm' : 'An toàn'}
+                    </span>
+                </div>
+
+                {/* AI Risk Score */}
+                <div style={{
+                    textAlign: 'center', padding: 20, borderRadius: 16,
+                    background: aiRiskPercent >= 35 ? '#fef2f2' : aiRiskPercent >= 15 ? '#fffbeb' : '#f0fdf4',
+                    border: `1px solid ${aiRiskPercent >= 35 ? '#fecdd3' : aiRiskPercent >= 15 ? '#fde68a' : '#bbf7d0'}`,
+                    boxShadow: `0 4px 12px ${aiRiskPercent >= 35 ? 'rgba(244,63,94,0.06)' : 'rgba(16,185,129,0.08)'}`,
+                    transition: 'all 0.25s ease'
+                }}>
+                    <p style={{ fontSize: 12, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 4 }}>
+                        Nguy cơ AI
+                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
+                        <svg width={120} height={120} viewBox="0 0 120 120">
+                            <circle cx="60" cy="60" r={radius} fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                            <circle
+                                cx="60" cy="60" r={radius} fill="none"
+                                stroke={aiRiskLabel.color}
+                                strokeWidth="8" strokeLinecap="round"
+                                strokeDasharray={circumference}
+                                strokeDashoffset={aiRiskOffset}
+                                style={{ transform: 'rotate(-90deg)', transformOrigin: '50% 50%', transition: 'stroke-dashoffset 1s ease' }}
+                            />
+                            <text x="60" y="55" textAnchor="middle" fill={aiRiskLabel.color} fontSize="28" fontWeight="800">
+                                {aiRiskPercent}%
+                            </text>
+                            <text x="60" y="72" textAnchor="middle" fill="#94a3b8" fontSize="10" fontWeight="500">
+                                nguy cơ AI
+                            </text>
+                        </svg>
+                    </div>
+                    <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 12px',
+                        borderRadius: 9999, fontSize: 12, fontWeight: 700,
+                        background: aiRiskPercent >= 35 ? '#fff1f2' : aiRiskPercent >= 15 ? '#fffbeb' : '#ecfdf5',
+                        color: aiRiskLabel.color,
+                        border: `1px solid ${aiRiskPercent >= 35 ? '#fecdd3' : aiRiskPercent >= 15 ? '#fde68a' : '#a7f3d0'}`
+                    }}>
+                        {aiRiskLabel.text}
                     </span>
                 </div>
 

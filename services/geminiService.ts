@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { SKKNInput, AnalysisResult, TitleAnalysisResult } from "../types";
+import { SKKNInput, AnalysisResult, TitleAnalysisResult, AIRiskDetails } from "../types";
 import {
   hasAnyKey,
   isQuotaOrRateLimitError,
@@ -85,6 +85,28 @@ Nếu nội dung quá ngắn (<200 từ), hãy cảnh báo trong phần kết lu
 Nếu phát hiện tiêu chuẩn loại trừ, PHẢI ghi rõ trong overallConclusion và đặt plagiarismRisk = "Rất cao".
 
 ⚠️ CẢNH BÁO CUỐI: Bạn là giám khảo NGHIÊM KHẮC, không phải người khích lệ. Nếu SKKN sơ sài, hãy chấm điểm THẤP và giải thích rõ lý do. Điểm 90-100 là CỰC KỲ HIẾM - chỉ dành cho SKKN thực sự xuất sắc với đầy đủ minh chứng.
+
+## 🤖 PHÂN TÍCH NGUY CƠ AI (AI Risk Detection)
+Bạn cũng PHẢI phân tích xem SKKN có dấu hiệu được viết bởi AI hay không, dựa trên:
+
+### Các chỉ số phân tích:
+1. **Perplexity Score (0-100)**: Đánh giá mức độ "bất ngờ" của từ vựng. Văn bản AI thường có perplexity thấp (20-40). Văn bản người viết: 40-80+.
+2. **Burstiness Score (0-100)**: Đánh giá biến động độ dài câu. AI viết câu đều đặn (burstiness thấp). Người viết câu ngắn dài xen kẽ.
+3. **Pattern Density (0-100)**: Tỷ lệ các mẫu câu đặc trưng AI: "trong bối cảnh... hiện nay", "tuy nhiên, thực tế cho thấy", "không chỉ... mà còn", "qua đó... học sinh", "do đó... là rất cần thiết".
+4. **Overall AI Percent (0-100)**: Phần trăm tổng thể khả năng văn bản do AI tạo.
+
+### Ngưỡng đánh giá:
+- **< 15%**: An toàn (Thấp) - Ít khả năng AI
+- **15-35%**: Rủi ro thấp (Trung bình) - Có thể có một số đoạn AI
+- **35-60%**: Rủi ro cao (Cao) - Nhiều dấu hiệu AI
+- **> 60%**: Rủi ro nghiêm trọng (Rất cao) - Gần như chắc chắn AI
+
+### Các mẫu câu đặc trưng AI cần kiểm tra:
+- ChatGPT: "trong bối cảnh... hiện nay", "theo định hướng... chương trình", "việc... là yêu cầu cấp thiết", "tuy nhiên... thực tế cho thấy", "không chỉ... mà còn"
+- Gemini: "điều này cho thấy... rằng", "một cách... hiệu quả", "đáng chú ý là", "cần lưu ý rằng"
+- Claude: "điều đáng chú ý là", "một điểm đáng xem xét", "có thể tranh luận rằng"
+
+CHẤM ĐIỂM NGHIÊM KHẮC: Nếu văn bản có burstiness thấp (câu đều đặn), perplexity thấp (từ vựng dễ đoán), nhiều pattern AI → aiRiskScore phải CAO.
 `;
 
 const RESPONSE_SCHEMA: Schema = {
@@ -173,8 +195,22 @@ const RESPONSE_SCHEMA: Schema = {
         },
       },
     },
+    aiRiskScore: { type: Type.NUMBER, description: "Điểm nguy cơ AI từ 0-100 (0 = hoàn toàn người viết, 100 = hoàn toàn AI)" },
+    aiRiskLevel: { type: Type.STRING, enum: ["Thấp", "Trung bình", "Cao", "Rất cao"], description: "Mức độ nguy cơ AI" },
+    aiRiskDetails: {
+      type: Type.OBJECT,
+      description: "Chi tiết phân tích nguy cơ AI",
+      properties: {
+        perplexityScore: { type: Type.NUMBER, description: "Điểm perplexity 0-100 (thấp = nghi ngờ AI)" },
+        burstinessScore: { type: Type.NUMBER, description: "Điểm burstiness 0-100 (thấp = câu đều đặn, nghi AI)" },
+        patternDensity: { type: Type.NUMBER, description: "Mật độ pattern AI 0-100 (cao = nhiều mẫu câu AI)" },
+        overallAIPercent: { type: Type.NUMBER, description: "Phần trăm tổng thể khả năng AI 0-100" },
+        suspiciousPatterns: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Danh sách các mẫu câu đặc trưng AI tìm thấy (tối đa 5)" },
+        recommendations: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Gợi ý cải thiện để giảm nguy cơ AI (tối đa 3)" },
+      },
+    },
   },
-  required: ["duplicateLevel", "duplicateDetails", "spellingErrors", "plagiarismRisk", "plagiarismSegments", "scores", "scoreDetails", "developmentPlan", "overallConclusion", "structure", "qualityCriteria"],
+  required: ["duplicateLevel", "duplicateDetails", "spellingErrors", "plagiarismRisk", "plagiarismSegments", "scores", "scoreDetails", "developmentPlan", "overallConclusion", "structure", "qualityCriteria", "aiRiskScore", "aiRiskLevel", "aiRiskDetails"],
 };
 
 // Fallback models theo thứ tự ưu tiên
@@ -437,9 +473,10 @@ export interface AutoFixResult {
     plagiarismRewritten: number;
     structureImproved: number;
     vocabularyEnhanced: number;
+    aiRiskReduced: number;
   };
   changes: Array<{
-    type: 'spelling' | 'plagiarism' | 'structure' | 'vocabulary';
+    type: 'spelling' | 'plagiarism' | 'structure' | 'vocabulary' | 'ai_detection';
     original: string;
     fixed: string;
     reason: string;
@@ -456,6 +493,8 @@ export const autoFixSKKN = async (
     spellingErrors: Array<{ error: string; correction: string }>;
     plagiarismSegments: Array<{ segment: string; advice: string }>;
     scoreDetails: Array<{ category: string; weakness: string }>;
+    aiRiskScore?: number;
+    aiRiskDetails?: AIRiskDetails;
   }
 ): Promise<AutoFixResult> => {
   const selectedModel = getModel();
@@ -474,6 +513,30 @@ export const autoFixSKKN = async (
   const limitedSpellingErrors = analysisResult.spellingErrors.slice(0, MAX_SPELLING_ERRORS);
   const limitedPlagiarismSegments = analysisResult.plagiarismSegments.slice(0, MAX_PLAGIARISM_SEGMENTS);
 
+  // Phân tích AI Risk để thêm vào prompt
+  const hasAIRisk = (analysisResult.aiRiskScore ?? 0) > 15;
+  const aiRiskInfo = hasAIRisk && analysisResult.aiRiskDetails
+    ? `
+### Giảm nguy cơ AI (AI Risk Score hiện tại: ${analysisResult.aiRiskScore}%):
+Các mẫu câu AI phát hiện được:
+${(analysisResult.aiRiskDetails.suspiciousPatterns || []).slice(0, 5).map((p, i) => `${i + 1}. "${p}"`).join('\n')}
+
+Áp dụng 10 KỸ THUẬT VƯỢT AI DETECTION sau để sửa lại văn bản, mục tiêu đưa AI score xuống dưới 15%:
+
+1. PERPLEXITY INJECTION: Thay 15-20% từ ngữ thông dụng bằng từ đồng nghĩa học thuật ít gặp hơn. Tránh lặp lại cùng 1 cụm từ trong 3 câu liên tiếp.
+2. BURSTINESS CONTROL: Đảm bảo có câu ngắn (<15 từ) xen kẽ câu dài (>40 từ). Không để 3 câu liên tiếp có độ dài tương đương.
+3. SYNTACTIC VARIATION: Thay đổi chủ ngữ đa dạng ("Tôi" → "Việc..." → "Quá trình..."). Dùng câu bị động 20-30%.
+4. LEXICAL SUBSTITUTION: Không lặp danh từ chính trong 2 câu liên tiếp. Chuẩn bị 3-4 từ đồng nghĩa cho khái niệm chính.
+5. SENTENCE COMPLEXITY: Xen kẽ câu đơn (20%), câu ghép (30%), câu phức (50%). Không 3 câu cùng loại liên tiếp.
+6. TRANSITION VARIATION: Không dùng cùng 1 liên từ quá 2 lần. "tuy nhiên" → "song" → "ngược lại" → "trái lại".
+7. INFORMATION DENSITY: 30% câu nhiều thông tin (số liệu), 40% trung bình, 30% ít thông tin (kết luận ngắn).
+8. PASSIVE VOICE: Dùng bị động 20-25% ở phần Phương pháp. Giữ chủ động ở suy nghĩ cá nhân.
+9. NOMINALIZATION: 60% danh từ hóa, 40% động từ. Không 3 câu liên tiếp toàn danh từ hóa.
+10. MICRO-VARIATION: Thêm ngoặc đơn chú thích, dấu hai chấm, trình bày số liệu đa dạng (%, phân số, tỷ lệ).
+
+⚠️ QUAN TRỌNG: Sửa TẤT CẢ các đoạn có dấu hiệu AI, KHÔNG CHỈ đoạn đạo văn. Mục tiêu: AI score < 15%.`
+    : '';
+
   const prompt = `
 Sửa SKKN theo danh sách lỗi. GIỮ NGUYÊN định dạng gốc (bold, italic, bảng, công thức).
 
@@ -489,6 +552,7 @@ ${limitedSpellingErrors.map((e, i) => `${i + 1}. "${e.error}" → "${e.correctio
 
 ### Đoạn đạo văn (${limitedPlagiarismSegments.length} đoạn):
 ${limitedPlagiarismSegments.map((p, i) => `${i + 1}. "${p.segment.substring(0, 80)}..." → ${p.advice}`).join('\n')}
+${aiRiskInfo}
 
 ## NỘI DUNG GỐC:
 ${truncatedContent}
@@ -496,10 +560,10 @@ ${truncatedContent}
 ## OUTPUT JSON:
 {
   "fixedContent": "TOÀN BỘ nội dung đã sửa (giữ nguyên phần không lỗi), bọc chỗ sửa trong <red>...</red>",
-  "summary": {"spellingFixed": N, "plagiarismRewritten": N, "structureImproved": N, "vocabularyEnhanced": N},
-  "changes": [{"type": "spelling|plagiarism", "original": "gốc", "fixed": "sửa", "reason": "lý do"}]
+  "summary": {"spellingFixed": N, "plagiarismRewritten": N, "structureImproved": N, "vocabularyEnhanced": N, "aiRiskReduced": N},
+  "changes": [{"type": "spelling|plagiarism|structure|vocabulary|ai_detection", "original": "gốc", "fixed": "sửa", "reason": "lý do"}]
 }
-Chỉ liệt kê tối đa 10 changes quan trọng nhất.
+Chỉ liệt kê tối đa 10 changes quan trọng nhất.${hasAIRisk ? ' Ưu tiên liệt kê các thay đổi loại ai_detection.' : ''}
 `;
 
   let lastError: Error | null = null;

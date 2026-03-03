@@ -42,7 +42,9 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
             const fixResult = await autoFixSKKN(contentToFix, {
                 spellingErrors: analysisResult.spellingErrors,
                 plagiarismSegments: analysisResult.plagiarismSegments,
-                scoreDetails: analysisResult.scoreDetails
+                scoreDetails: analysisResult.scoreDetails,
+                aiRiskScore: analysisResult.aiRiskScore,
+                aiRiskDetails: analysisResult.aiRiskDetails
             });
 
             // Kiểm tra nếu AI trả về fixedContent ngắn hơn đáng kể so với nội dung gốc
@@ -252,6 +254,7 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
             case 'plagiarism': return { text: 'Đạo văn', color: 'bg-red-100 text-red-700' };
             case 'structure': return { text: 'Cấu trúc', color: 'bg-purple-100 text-purple-700' };
             case 'vocabulary': return { text: 'Từ vựng', color: 'bg-green-100 text-green-700' };
+            case 'ai_detection': return { text: 'Giảm AI', color: 'bg-orange-100 text-orange-700' };
             default: return { text: type, color: 'bg-gray-100 text-gray-700' };
         }
     };
@@ -302,6 +305,11 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
                                 <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
                                     Nâng cấp từ vựng
                                 </span>
+                                {(analysisResult.aiRiskScore ?? 0) > 15 && (
+                                    <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm font-semibold">
+                                        🤖 Giảm nguy cơ AI ({analysisResult.aiRiskScore}% → &lt;15%)
+                                    </span>
+                                )}
                             </div>
 
                             {/* Option chuẩn hóa văn bản */}
@@ -376,7 +384,7 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
                                     </div>
                                     <h3 className="text-lg font-bold text-green-800">Đã hoàn thành sửa SKKN!</h3>
                                 </div>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                                     <div className="bg-white rounded-lg p-4 text-center">
                                         <div className="text-2xl font-bold text-blue-600">{result.summary.spellingFixed}</div>
                                         <div className="text-sm text-gray-500">Lỗi chính tả</div>
@@ -392,6 +400,10 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
                                     <div className="bg-white rounded-lg p-4 text-center">
                                         <div className="text-2xl font-bold text-green-600">{result.summary.vocabularyEnhanced}</div>
                                         <div className="text-sm text-gray-500">Từ nâng cấp</div>
+                                    </div>
+                                    <div className="bg-white rounded-lg p-4 text-center">
+                                        <div className="text-2xl font-bold text-orange-600">{result.summary.aiRiskReduced ?? 0}</div>
+                                        <div className="text-sm text-gray-500">Đoạn giảm AI</div>
                                     </div>
                                 </div>
                             </div>
