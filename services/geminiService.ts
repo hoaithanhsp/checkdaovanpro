@@ -216,13 +216,13 @@ const RESPONSE_SCHEMA: Schema = {
 
 // Fallback models theo thứ tự ưu tiên
 const FALLBACK_MODELS = [
-  'gemini-3-flash-preview',
-  'gemini-2.5-flash',
-  'gemini-2.5-pro',
+  'gemini-2.0-flash',
+  'gemini-2.5-flash-preview-05-20',
+  'gemini-2.5-flash-lite',
 ];
 
 // Model mặc định
-const DEFAULT_MODEL = 'gemini-3-flash-preview';
+const DEFAULT_MODEL = 'gemini-2.0-flash';
 
 // Helper để lấy API key hiện tại (hỗ trợ auto-rotation)
 const getApiKeyOrThrow = (): string => {

@@ -2,6 +2,15 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { ThemeProvider } from './contexts/ThemeContext';
+import ErrorBoundary from './components/ErrorBoundary';
+
+// Dọn dẹp model cũ không hợp lệ trong localStorage
+const INVALID_MODELS = ['gemini-3-flash-preview', 'gemini-3-pro-preview'];
+const savedModel = localStorage.getItem('skkn-gemini-model');
+if (savedModel && INVALID_MODELS.includes(savedModel)) {
+  localStorage.removeItem('skkn-gemini-model');
+  console.log(`🔄 Đã xóa model cũ không hợp lệ: ${savedModel}`);
+}
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -11,8 +20,10 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <ThemeProvider>
-      <App />
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );

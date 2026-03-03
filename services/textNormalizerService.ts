@@ -9,9 +9,9 @@ import { getSelectedModel } from './apiKeyService';
 
 // Fallback models theo thứ tự ưu tiên
 const FALLBACK_MODELS = [
-    'gemini-3-flash-preview',
-    'gemini-3-pro-preview',
-    'gemini-2.5-flash'
+    'gemini-2.0-flash',
+    'gemini-2.5-flash-preview-05-20',
+    'gemini-2.5-flash-lite'
 ];
 
 // ==================== TYPES ====================
