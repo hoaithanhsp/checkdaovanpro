@@ -138,7 +138,7 @@ const App: React.FC = () => {
                   </div>
                   <div>
                     <h2 className="text-xl font-bold text-white">Hướng dẫn sử dụng</h2>
-                    <p className="text-blue-100 text-sm">SKKN Checker Pro v1.4</p>
+                    <p className="text-blue-100 text-sm">Trợ Lý SKKN v1.4</p>
                   </div>
                 </div>
                 <button
@@ -237,7 +237,7 @@ const App: React.FC = () => {
               <ShieldCheck size={24} />
             </div>
             <div>
-              <h1 className={`text-xl font-bold tracking-tight leading-none ${isDark ? 'text-white' : 'text-gray-900'}`}>SKKN Checker Pro</h1>
+              <h1 className={`text-xl font-bold tracking-tight leading-none ${isDark ? 'text-white' : 'text-gray-900'}`}>Trợ Lý SKKN</h1>
               <p className={`text-xs font-medium tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>TRỢ LÝ THẨM ĐỊNH SKKN</p>
             </div>
           </div>
@@ -297,15 +297,15 @@ const App: React.FC = () => {
               {/* Title with gradient */}
               <h1 className="text-5xl md:text-6xl font-black mb-4 tracking-tight">
                 <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent animate-pulse">
-                  SKKN
+                  TRỢ
                 </span>
                 {' '}
                 <span className="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 bg-clip-text text-transparent">
-                  CHECKER
+                  LÝ
                 </span>
                 {' '}
                 <span className="bg-gradient-to-r from-orange-500 via-red-500 to-rose-500 bg-clip-text text-transparent">
-                  PRO
+                  SKKN
                 </span>
               </h1>
 
