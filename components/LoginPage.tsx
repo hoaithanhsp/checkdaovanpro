@@ -67,7 +67,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                         </div>
                         <h1 className="text-3xl font-black text-white mb-2 tracking-tight">
                             <span className="bg-gradient-to-r from-yellow-200 via-pink-200 to-cyan-200 bg-clip-text text-transparent">
-                                SKKN CHECKER PRO
+                                TRỢ LÝ SKKN
                             </span>
                         </h1>
                         <p className="text-white/80 text-sm">
@@ -148,7 +148,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     {/* Footer */}
                     <div className="px-8 pb-6 text-center">
                         <p className="text-white/40 text-xs">
-                            © 2024 SKKN Checker Pro - Phát triển bởi thầy Trần Hoài Thanh
+                            © 2024 Trợ Lý SKKN - Phát triển bởi thầy Trần Hoài Thanh
                         </p>
                     </div>
                 </div>
