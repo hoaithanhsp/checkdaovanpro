@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { SKKNInput, AnalysisResult, TitleAnalysisResult, AIRiskDetails } from "../types";
+import { SKKNInput, AnalysisResult, TitleAnalysisResult, AIRiskDetails, ImprovementAnalysisResult, AutoImprovementFixResult, DetectedIssue } from "../types";
 import {
   hasAnyKey,
   isQuotaOrRateLimitError,
@@ -707,6 +707,277 @@ Trả về JSON với format:
       } catch (error: any) {
         console.warn(`[TitleAnalysis] Model ${model} thất bại:`, error.message);
         lastError = error;
+
+        if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
+          markKeyExhausted(apiKey);
+          const nextKey = getNextApiKey();
+          if (nextKey) {
+            apiKey = nextKey;
+            break;
+          } else {
+            throw new Error(getVietnameseErrorMessage(error));
+          }
+        }
+      }
+    }
+    if (!lastError || (!isQuotaOrRateLimitError(lastError) && !isInvalidKeyError(lastError))) {
+      break;
+    }
+  }
+
+  throw lastError || new Error("Tất cả các model đều thất bại. Vui lòng thử lại sau.");
+};
+
+// ========== IMPROVEMENT ANALYSIS ==========
+
+/**
+ * Phân tích SKKN để đề xuất cải thiện
+ * Đánh giá theo 9 tiêu chí, phát hiện vấn đề, đề xuất lộ trình
+ */
+export const analyzeForImprovement = async (
+  content: string,
+  metadata?: { title?: string; subject?: string; level?: string }
+): Promise<ImprovementAnalysisResult> => {
+  const selectedModel = getModel();
+  const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
+
+  const truncatedContent = content.length > 50000 ? content.substring(0, 50000) : content;
+
+  const prompt = `
+Bạn là chuyên gia thẩm định và tư vấn cải thiện SKKN (Sáng kiến kinh nghiệm) với 20 năm kinh nghiệm.
+
+THÔNG TIN SKKN:
+${metadata?.title ? `- Tên đề tài: ${metadata.title}` : ''}
+${metadata?.subject ? `- Môn học: ${metadata.subject}` : ''}
+${metadata?.level ? `- Cấp học: ${metadata.level}` : ''}
+
+NỘI DUNG SKKN:
+${truncatedContent}
+
+## NHIỆM VỤ:
+Đánh giá SKKN theo 9 tiêu chí dưới đây (mỗi tiêu chí tối đa 10 điểm, tổng 90 điểm, quy đổi sang thang 100):
+
+1. C01 - Cấu trúc: Tính đầy đủ, logic và mạch lạc
+2. C02 - Cơ sở lý luận: Lý thuyết giáo dục, trích dẫn nghiên cứu
+3. C03 - Số liệu minh chứng: Chất lượng, tính thuyết phục
+4. C04 - Tính khả thi: Khả năng áp dụng thực tế
+5. C05 - Tính thực tiễn: Giải quyết vấn đề thực tế
+6. C06 - Tính mới: Sáng tạo, khác biệt
+7. C07 - Khả năng nhân rộng: Áp dụng rộng rãi
+8. C08 - Ngôn ngữ: Diễn đạt, ngôn ngữ khoa học
+9. C09 - Hình thức: Trình bày, lỗi chính tả
+
+Sau khi đánh giá, phát hiện các vấn đề cần cải thiện và đề xuất giải pháp cụ thể.
+
+## OUTPUT JSON:
+{
+  "totalScore": <tổng điểm quy đổi thang 100>,
+  "maxScore": 100,
+  "rating": "<Xuất sắc|Tốt|Khá|Trung bình|Yếu>",
+  "colorCode": "<mã màu hex>",
+  "criteria": [
+    {
+      "criteriaId": "C01",
+      "criteriaName": "Cấu trúc",
+      "score": <0-10>,
+      "maxScore": 10,
+      "status": "<excellent|good|average|weak|critical>",
+      "feedback": "Nhận xét chi tiết"
+    }
+  ],
+  "detectedIssues": [
+    {
+      "issueId": "I001",
+      "issueCode": "WEAK_THEORY_BASE",
+      "issueName": "Cơ sở lý luận yếu",
+      "criteriaId": "C02",
+      "severity": "<critical|high|medium|low>",
+      "priority": <1-4>,
+      "description": "Mô tả chi tiết vấn đề",
+      "solutions": [
+        {
+          "solutionId": "S001",
+          "solutionType": "<rewrite|add|fix|enhance>",
+          "actionType": "replace_section",
+          "targetSection": "Cơ sở lý luận",
+          "exampleContent": "Nội dung mẫu gợi ý (100-300 từ)",
+          "estimatedTime": "2-3 giờ",
+          "difficulty": "<low|medium|high>",
+          "impactScore": <1-10>
+        }
+      ]
+    }
+  ],
+  "roadmap": {
+    "urgent": [{"issue": {<issue object>}, "estimatedTime": "X giờ", "impact": <1-10>}],
+    "high": [...],
+    "medium": [...],
+    "low": [...]
+  },
+  "estimatedScoreAfterFix": <điểm dự kiến sau khi sửa>,
+  "recommendation": "Khuyến nghị tổng quan"
+}
+
+⚠️ Phải trả về ĐẦY ĐỦ 9 tiêu chí. Phát hiện TỐI THIỂU 3 vấn đề. Mỗi vấn đề phải có ít nhất 1 giải pháp với nội dung mẫu CỤ THỂ.
+`;
+
+  let lastError: Error | null = null;
+  let apiKey = getApiKeyOrThrow();
+
+  while (apiKey) {
+    const ai = new GoogleGenAI({ apiKey });
+
+    for (const model of modelsToTry) {
+      try {
+        console.log(`[Improvement] Key ...${apiKey.slice(-6)} | Model: ${model}`);
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.3,
+          },
+        });
+
+        if (response.text) {
+          return JSON.parse(response.text) as ImprovementAnalysisResult;
+        } else {
+          throw new Error("Empty response from Gemini");
+        }
+      } catch (error: any) {
+        console.warn(`[Improvement] Model ${model} thất bại:`, error.message);
+        lastError = error;
+
+        if (isModelNotFoundError(error)) {
+          continue;
+        }
+
+        if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
+          markKeyExhausted(apiKey);
+          const nextKey = getNextApiKey();
+          if (nextKey) {
+            apiKey = nextKey;
+            break;
+          } else {
+            throw new Error(getVietnameseErrorMessage(error));
+          }
+        }
+      }
+    }
+    if (!lastError || (!isQuotaOrRateLimitError(lastError) && !isInvalidKeyError(lastError))) {
+      break;
+    }
+  }
+
+  throw lastError || new Error("Tất cả các model đều thất bại. Vui lòng thử lại sau.");
+};
+
+/**
+ * Sinh nội dung sửa chữa SKKN dựa trên các vấn đề đã chọn
+ * Trả về danh sách changes để inject vào file .docx gốc
+ */
+export const generateImprovementContent = async (
+  originalContent: string,
+  selectedIssues: DetectedIssue[],
+  metadata?: { title?: string; subject?: string }
+): Promise<AutoImprovementFixResult> => {
+  const selectedModel = getModel();
+  const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
+
+  const truncatedContent = originalContent.length > 50000
+    ? originalContent.substring(0, 50000)
+    : originalContent;
+
+  const issuesDescription = selectedIssues.map((issue, i) => {
+    const solutions = issue.solutions.map(s =>
+      `  - ${s.solutionType}: ${s.actionType} tại "${s.targetSection}" (ưu tiên: ${s.impactScore}/10)`
+    ).join('\n');
+    return `${i + 1}. [${issue.severity.toUpperCase()}] ${issue.issueName} (${issue.issueCode})
+   Mô tả: ${issue.description}
+   Giải pháp:
+${solutions}`;
+  }).join('\n\n');
+
+  const prompt = `
+Bạn là chuyên gia sửa chữa và nâng cấp SKKN (Sáng kiến kinh nghiệm).
+
+${metadata?.title ? `ĐỀ TÀI: ${metadata.title}` : ''}
+${metadata?.subject ? `MÔN HỌC: ${metadata.subject}` : ''}
+
+## CÁC VẤN ĐỀ CẦN SỬA (${selectedIssues.length} vấn đề):
+${issuesDescription}
+
+## NỘI DUNG SKKN GỐC:
+${truncatedContent}
+
+## NHIỆM VỤ:
+Sửa chữa SKKN theo các vấn đề trên. Với mỗi vấn đề:
+- Nếu actionType = "replace_section": Tìm đoạn tương ứng trong bản gốc và viết lại hoàn toàn
+- Nếu actionType = "insert_section": Viết nội dung mới để chèn vào vị trí phù hợp
+- Nếu actionType = "correct_errors": Sửa các lỗi chính tả/ngữ pháp
+- Nếu actionType = "add_details": Bổ sung chi tiết vào phần hiện có
+
+⚠️ QUY TẮC:
+1. fixedContent phải chứa TOÀN BỘ nội dung SKKN đã sửa
+2. Bọc chỗ đã sửa/thêm mới trong thẻ <red>...</red>
+3. Giữ nguyên 100% phần không liên quan đến vấn đề
+4. Nội dung mới phải chất lượng: có trích dẫn, lý thuyết, số liệu cụ thể
+5. Sử dụng ngôn ngữ khoa học, phù hợp SKKN giáo dục
+
+## OUTPUT JSON:
+{
+  "fixedContent": "TOÀN BỘ nội dung đã sửa, bọc chỗ sửa trong <red>...</red>",
+  "changes": [
+    {
+      "issueId": "I001",
+      "issueName": "Cơ sở lý luận yếu",
+      "actionType": "replace_section",
+      "targetSection": "Cơ sở lý luận",
+      "original": "Đoạn gốc cần thay thế (50-100 ký tự đầu)",
+      "fixed": "Nội dung đã sửa/thêm mới",
+      "type": "rewrite"
+    }
+  ],
+  "summary": {
+    "sectionsRewritten": <số section viết lại>,
+    "sectionsAdded": <số section thêm mới>,
+    "errorsFixed": <số lỗi sửa>,
+    "totalChanges": <tổng số thay đổi>
+  },
+  "newEstimatedScore": <điểm dự kiến sau sửa>
+}
+`;
+
+  let lastError: Error | null = null;
+  let apiKey = getApiKeyOrThrow();
+
+  while (apiKey) {
+    const ai = new GoogleGenAI({ apiKey });
+
+    for (const model of modelsToTry) {
+      try {
+        console.log(`[ImprovementFix] Key ...${apiKey.slice(-6)} | Model: ${model}`);
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.2,
+          },
+        });
+
+        if (response.text) {
+          return JSON.parse(response.text) as AutoImprovementFixResult;
+        } else {
+          throw new Error("Empty response from Gemini");
+        }
+      } catch (error: any) {
+        console.warn(`[ImprovementFix] Model ${model} thất bại:`, error.message);
+        lastError = error;
+
+        if (isModelNotFoundError(error)) {
+          continue;
+        }
 
         if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
           markKeyExhausted(apiKey);
