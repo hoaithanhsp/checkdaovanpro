@@ -135,3 +135,83 @@ export interface TitleAnalysisResult {
   relatedTopics: string[];
   overallVerdict: string;
 }
+
+// ========== IMPROVEMENT ANALYSIS TYPES ==========
+
+export interface ImprovementCriterion {
+  criteriaId: string;
+  criteriaName: string;
+  score: number;
+  maxScore: number;
+  status: 'excellent' | 'good' | 'average' | 'weak' | 'critical';
+  feedback: string;
+}
+
+export interface ImprovementSolution {
+  solutionId: string;
+  solutionType: 'rewrite' | 'add' | 'fix' | 'enhance';
+  actionType: string;
+  targetSection: string;
+  exampleContent: string;
+  estimatedTime: string;
+  difficulty: 'low' | 'medium' | 'high';
+  impactScore: number;
+}
+
+export interface DetectedIssue {
+  issueId: string;
+  issueCode: string;
+  issueName: string;
+  criteriaId: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  priority: number;
+  description: string;
+  solutions: ImprovementSolution[];
+}
+
+export interface ImprovementRoadmapItem {
+  issue: DetectedIssue;
+  estimatedTime: string;
+  impact: number;
+}
+
+export interface ImprovementRoadmap {
+  urgent: ImprovementRoadmapItem[];
+  high: ImprovementRoadmapItem[];
+  medium: ImprovementRoadmapItem[];
+  low: ImprovementRoadmapItem[];
+}
+
+export interface ImprovementAnalysisResult {
+  totalScore: number;
+  maxScore: number;
+  rating: string;
+  colorCode: string;
+  criteria: ImprovementCriterion[];
+  detectedIssues: DetectedIssue[];
+  roadmap: ImprovementRoadmap;
+  estimatedScoreAfterFix: number;
+  recommendation: string;
+}
+
+export interface ImprovementFixChange {
+  issueId: string;
+  issueName: string;
+  actionType: string;
+  targetSection: string;
+  original: string;
+  fixed: string;
+  type: 'rewrite' | 'add' | 'fix' | 'enhance';
+}
+
+export interface AutoImprovementFixResult {
+  fixedContent: string;
+  changes: ImprovementFixChange[];
+  summary: {
+    sectionsRewritten: number;
+    sectionsAdded: number;
+    errorsFixed: number;
+    totalChanges: number;
+  };
+  newEstimatedScore: number;
+}
