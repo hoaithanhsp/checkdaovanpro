@@ -57,10 +57,21 @@ const AIReductionPanel: React.FC<AIReductionPanelProps> = ({
         if (!result || !originalDocx) return;
         setIsExporting(true);
         try {
+            // Strip markdown helper function
+            const stripMd = (str: string) => {
+                let s = str.replace(/\*\*(.*?)\*\*/g, '$1').replace(/(^|\n)\*\s/g, '$1- ').replace(/\*/g, '');
+                for (let i = 0; i < 5; i++) {
+                    const next = s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+                    if (next === s) break;
+                    s = next;
+                }
+                return s;
+            };
+
             const changes = (result.changes || []).map(c => ({
-                original: c.original,
-                fixed: c.fixed,
-                type: c.technique as string,
+                original: stripMd(c.original),
+                fixed: stripMd(c.fixed),
+                type: 'rewrite', // Luôn set là rewrite để trigger thay thế đoạn
             }));
             const blob = await injectFixedContentToDocx(originalDocx, result.fixedContent, changes);
             const newFileName = originalDocx.fileName.replace('.docx', '_GIAM_AI.docx');
