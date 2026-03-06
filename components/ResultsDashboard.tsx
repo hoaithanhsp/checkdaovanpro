@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { AnalysisResult, SpellingError, PlagiarismSegment, SKKNInput } from '../types';
+import { AnalysisResult, SpellingError, PlagiarismSegment, SKKNInput, ImprovementAnalysisResult } from '../types';
 import {
   RadialBarChart, RadialBar, Legend, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, Cell
 } from 'recharts';
 import {
   AlertTriangle, CheckCircle, Search, FileText,
-  TrendingUp, Award, BookOpen, AlertOctagon, Download, Sparkles, FileDown, Loader2, PenLine, CheckSquare, BookMarked, Share2, Wand2
+  TrendingUp, Award, BookOpen, AlertOctagon, Download, Sparkles, FileDown, Loader2, PenLine, CheckSquare, BookMarked, Share2, Wand2, BarChart3, Wrench
 } from 'lucide-react';
 import { exportToWord } from '../services/exportService';
 import RewritePanel from './RewritePanel';
@@ -14,6 +14,8 @@ import ChecklistPanel from './ChecklistPanel';
 import ReferencesPanel from './ReferencesPanel';
 import SharePanel from './SharePanel';
 import AutoFixPanel from './AutoFixPanel';
+import ImprovementPanel from './ImprovementPanel';
+import AutoImprovementFixPanel from './AutoImprovementFixPanel';
 import AnalysisDashboard from './AnalysisDashboard';
 
 interface ResultsDashboardProps {
@@ -30,6 +32,9 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
   const [showReferences, setShowReferences] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showAutoFix, setShowAutoFix] = useState(false);
+  const [showImprovement, setShowImprovement] = useState(false);
+  const [showAutoImprovement, setShowAutoImprovement] = useState(false);
+  const [improvementResult, setImprovementResult] = useState<ImprovementAnalysisResult | null>(null);
 
   // Safe defaults cho các trường mảng có thể undefined từ API
   const spellingErrors = result.spellingErrors || [];
@@ -119,6 +124,34 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
         />
       )}
 
+      {/* Improvement Panel Modal */}
+      {showImprovement && input && (
+        <ImprovementPanel
+          isOpen={showImprovement}
+          onClose={() => setShowImprovement(false)}
+          originalContent={input.content}
+          input={input}
+          originalDocx={input.originalDocx}
+          onStartAutoFix={(impResult) => {
+            setImprovementResult(impResult);
+            setShowImprovement(false);
+            setShowAutoImprovement(true);
+          }}
+        />
+      )}
+
+      {/* Auto Improvement Fix Panel Modal */}
+      {showAutoImprovement && input && improvementResult && (
+        <AutoImprovementFixPanel
+          isOpen={showAutoImprovement}
+          onClose={() => setShowAutoImprovement(false)}
+          originalContent={input.content}
+          improvementResult={improvementResult}
+          input={input}
+          originalDocx={input.originalDocx}
+        />
+      )}
+
       {/* Header Summary */}
       <div className="bg-white rounded-2xl shadow-lg p-8 border-l-8 border-blue-600 flex flex-col md:flex-row justify-between items-center gap-6">
         <div>
@@ -162,6 +195,28 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
             title="Tự động sửa SKKN"
           >
             <Wand2 size={24} />
+          </button>
+          {/* Improvement Panel Button */}
+          <button
+            onClick={() => setShowImprovement(true)}
+            className="p-3 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white transition-all shadow-lg hover:shadow-xl"
+            title="Đề xuất cải thiện SKKN"
+          >
+            <BarChart3 size={24} />
+          </button>
+          {/* Auto Improvement Fix Button */}
+          <button
+            onClick={() => {
+              if (improvementResult) {
+                setShowAutoImprovement(true);
+              } else {
+                setShowImprovement(true);
+              }
+            }}
+            className="p-3 rounded-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white transition-all shadow-lg hover:shadow-xl"
+            title="Sửa chữa SKKN từ đề xuất"
+          >
+            <Wrench size={24} />
           </button>
           <div className="relative">
             <button
