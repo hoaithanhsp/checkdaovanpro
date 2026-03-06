@@ -105,7 +105,27 @@ const AutoImprovementFixPanel: React.FC<AutoImprovementFixPanelProps> = ({
         try {
             const { Document: DocClass, Packer, Paragraph: Para, TextRun: TR, HeadingLevel: HL, AlignmentType: AT } =
                 await import('docx');
-            const lines = result.fixedContent.split('\n');
+
+            // Loại bỏ Markdown và unescape HTML entities
+            const cleanContent = result.fixedContent
+                .replace(/\*\*(.*?)\*\*/g, '$1') // Bỏ **bôi đậm**
+                .replace(/(^|\n)\*\s/g, '$1- ')  // Bỏ * list items
+                .replace(/\*/g, '');             // Bỏ * còn lại
+
+            // Deep unescape: &amp;lt;red&amp;gt; → &lt;red&gt; → <red>
+            let unescaped = cleanContent;
+            for (let i = 0; i < 10; i++) {
+                const next = unescaped
+                    .replace(/&amp;/g, '&')
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/&quot;/g, '"')
+                    .replace(/&apos;/g, "'");
+                if (next === unescaped) break;
+                unescaped = next;
+            }
+
+            const lines = unescaped.split('\n');
             const children: any[] = [];
 
             for (const line of lines) {
@@ -315,9 +335,9 @@ const AutoImprovementFixPanel: React.FC<AutoImprovementFixPanelProps> = ({
                                             >
                                                 <div className="flex items-center gap-2">
                                                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${change.type === 'rewrite' ? 'bg-purple-100 text-purple-700' :
-                                                            change.type === 'add' ? 'bg-emerald-100 text-emerald-700' :
-                                                                change.type === 'fix' ? 'bg-blue-100 text-blue-700' :
-                                                                    'bg-gray-100 text-gray-700'
+                                                        change.type === 'add' ? 'bg-emerald-100 text-emerald-700' :
+                                                            change.type === 'fix' ? 'bg-blue-100 text-blue-700' :
+                                                                'bg-gray-100 text-gray-700'
                                                         }`}>
                                                         {change.type === 'rewrite' ? 'Viết lại' : change.type === 'add' ? 'Thêm mới' : change.type === 'fix' ? 'Sửa lỗi' : 'Nâng cấp'}
                                                     </span>
