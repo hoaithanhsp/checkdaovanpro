@@ -215,3 +215,37 @@ export interface AutoImprovementFixResult {
   };
   newEstimatedScore: number;
 }
+
+// ========== AI REDUCTION ==========
+
+export interface AIReductionChange {
+  technique: 'sentence_restructure' | 'lexical_diversify' | 'syntactic_variation' | 'density_adjust' | 'micro_variation';
+  techniqueName: string;
+  original: string;
+  fixed: string;
+  reason: string;
+}
+
+export interface AIReductionResult {
+  fixedContent: string;
+  changes: AIReductionChange[];
+  stats: {
+    sentencesRestructured: number;
+    wordsReplaced: number;
+    patternsRemoved: number;
+    syntacticChanges: number;
+    microVariations: number;
+  };
+  beforeMetrics: {
+    aiScore: number;
+    perplexity: number;
+    burstiness: number;
+    patternDensity: number;
+  };
+  afterMetrics: {
+    estimatedAIScore: number;
+    estimatedPerplexity: number;
+    estimatedBurstiness: number;
+    estimatedPatternDensity: number;
+  };
+}
