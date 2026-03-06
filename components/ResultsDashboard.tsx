@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import {
   AlertTriangle, CheckCircle, Search, FileText,
-  TrendingUp, Award, BookOpen, AlertOctagon, Download, Sparkles, FileDown, Loader2, PenLine, CheckSquare, BookMarked, Share2, Wand2, BarChart3, Wrench
+  TrendingUp, Award, BookOpen, AlertOctagon, Download, Sparkles, FileDown, Loader2, PenLine, CheckSquare, BookMarked, Share2, Wand2, BarChart3, Wrench, Bot
 } from 'lucide-react';
 import { exportToWord } from '../services/exportService';
 import RewritePanel from './RewritePanel';
@@ -16,6 +16,7 @@ import SharePanel from './SharePanel';
 import AutoFixPanel from './AutoFixPanel';
 import ImprovementPanel from './ImprovementPanel';
 import AutoImprovementFixPanel from './AutoImprovementFixPanel';
+import AIReductionPanel from './AIReductionPanel';
 import AnalysisDashboard from './AnalysisDashboard';
 
 interface ResultsDashboardProps {
@@ -34,6 +35,7 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
   const [showAutoFix, setShowAutoFix] = useState(false);
   const [showImprovement, setShowImprovement] = useState(false);
   const [showAutoImprovement, setShowAutoImprovement] = useState(false);
+  const [showAIReduction, setShowAIReduction] = useState(false);
   const [improvementResult, setImprovementResult] = useState<ImprovementAnalysisResult | null>(null);
 
   // Safe defaults cho các trường mảng có thể undefined từ API
@@ -152,6 +154,18 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
         />
       )}
 
+      {/* AI Reduction Panel Modal */}
+      {showAIReduction && input && result.aiRiskDetails && (
+        <AIReductionPanel
+          isOpen={showAIReduction}
+          onClose={() => setShowAIReduction(false)}
+          originalContent={input.content}
+          aiRiskScore={result.aiRiskScore || 0}
+          aiRiskDetails={result.aiRiskDetails}
+          originalDocx={input.originalDocx}
+        />
+      )}
+
       {/* Header Summary */}
       <div className="bg-white rounded-2xl shadow-lg p-8 border-l-8 border-blue-600 flex flex-col md:flex-row justify-between items-center gap-6">
         <div>
@@ -218,6 +232,16 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
           >
             <Wrench size={24} />
           </button>
+          {/* AI Reduction Button (chỉ hiện khi có rủi ro AI) */}
+          {((result.aiRiskScore || 0) > 20) && (
+            <button
+              onClick={() => setShowAIReduction(true)}
+              className="p-3 rounded-full bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white transition-all shadow-lg hover:shadow-xl"
+              title={`Giảm độ AI (${result.aiRiskScore}%)`}
+            >
+              <Bot size={24} />
+            </button>
+          )}
           <div className="relative">
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
