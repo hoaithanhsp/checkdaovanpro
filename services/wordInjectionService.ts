@@ -31,15 +31,55 @@ const escapeXml = (text: string): string => {
 };
 
 /**
- * Normalize text để so sánh (xử lý Unicode và dấu tiếng Việt)
+ * Unescape XML entities (ngược lại escapeXml)
+ */
+const unescapeXml = (text: string): string => {
+    return text
+        .replace(/&apos;/g, "'")
+        .replace(/&quot;/g, '"')
+        .replace(/&gt;/g, '>')
+        .replace(/&lt;/g, '<')
+        .replace(/&amp;/g, '&');
+};
+
+/**
+ * Deep unescape - xử lý escape nhiều lần lồng nhau
+ * VD: &amp;amp;lt;red&amp;amp;gt; → &amp;lt;red&amp;gt; → &lt;red&gt; → <red>
+ */
+const deepUnescapeXml = (text: string): string => {
+    let prev = text;
+    let current = unescapeXml(text);
+    // Tối đa 10 lần để tránh infinite loop
+    let iterations = 0;
+    while (current !== prev && iterations < 10) {
+        prev = current;
+        current = unescapeXml(current);
+        iterations++;
+    }
+    return current;
+};
+
+/**
+ * Normalize text để so sánh (xử lý Unicode, dấu tiếng Việt và Markdown)
  */
 const normalizeText = (text: string): string => {
     return text
         .normalize('NFC')  // Chuẩn hóa Unicode
+        .replace(/\*\*/g, '')  // Bỏ markdown bold
         .replace(/\s+/g, ' ')  // Multiple spaces → single space
         .replace(/[\r\n\t]+/g, ' ')  // Newlines, tabs → space
         .trim()
         .toLowerCase();
+};
+
+/**
+ * Loại bỏ các ký tự Markdown (**, *) ra khỏi text để hiển thị đẹp trong Word
+ */
+const stripMarkdown = (text: string): string => {
+    return text
+        .replace(/\*\*(.*?)\*\*/g, '$1') // Bỏ **bôi đậm** nhưng giữ text bên trong
+        .replace(/(^|\n)\*\s/g, '$1- ')  // Thay * list item bằng gạch đầu dòng
+        .replace(/\*/g, '');             // Xóa các dấu * còn lại
 };
 
 /**
@@ -50,7 +90,7 @@ const extractTextFromParagraph = (paragraphXml: string): string => {
     return textMatches
         .map(t => {
             const match = t.match(/<w:t[^>]*>([^<]*)<\/w:t>/);
-            return match ? match[1] : '';
+            return match ? unescapeXml(match[1]) : '';
         })
         .join('');
 };
@@ -107,6 +147,49 @@ const replaceTextInParagraph = (
 
     let newRuns = '';
 
+    // Helper để parse replacementText chứa <red>...</red> và tạo ra các XML runs
+    const createRunsFromReplacement = (rawText: string): string => {
+        if (!rawText) return '';
+
+        // Deep unescape để xử lý trường hợp Gemini trả về &lt;red&gt; hoặc &amp;lt;red&amp;gt;...
+        const text = deepUnescapeXml(rawText);
+
+        let runsXml = '';
+        let currentIndex = 0;
+        const redOpenTag = '<red>';
+        const redCloseTag = '</red>';
+
+        while (currentIndex < text.length) {
+            const openIndex = text.indexOf(redOpenTag, currentIndex);
+
+            if (openIndex === -1) {
+                const remaining = text.substring(currentIndex);
+                if (remaining) {
+                    runsXml += `<w:r><w:t xml:space="preserve">${escapeXml(remaining)}</w:t></w:r>`;
+                }
+                break;
+            }
+
+            if (openIndex > currentIndex) {
+                const normalText = text.substring(currentIndex, openIndex);
+                runsXml += `<w:r><w:t xml:space="preserve">${escapeXml(normalText)}</w:t></w:r>`;
+            }
+
+            const closeIndex = text.indexOf(redCloseTag, openIndex);
+            if (closeIndex === -1) {
+                const remaining = text.substring(openIndex + redOpenTag.length);
+                runsXml += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(remaining)}</w:t></w:r>`;
+                break;
+            }
+
+            const redText = text.substring(openIndex + redOpenTag.length, closeIndex);
+            runsXml += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(redText)}</w:t></w:r>`;
+
+            currentIndex = closeIndex + redCloseTag.length;
+        }
+        return runsXml;
+    };
+
     if (match && match.index !== undefined) {
         const startIndex = match.index;
         const endIndex = startIndex + match[0].length;
@@ -121,8 +204,8 @@ const replaceTextInParagraph = (
             newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(beforeText)}</w:t></w:r>`;
         }
 
-        // Run 2: Text đã sửa - MÀU ĐỎ
-        newRuns += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(replacementText)}</w:t></w:r>`;
+        // Run 2: Text đã sửa - Xử lý tag <red>
+        newRuns += createRunsFromReplacement(replacementText);
 
         // Run 3: Text sau đoạn cần sửa (nếu có)
         if (afterText) {
@@ -162,14 +245,14 @@ const replaceTextInParagraph = (
             if (beforeText) {
                 newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(beforeText)}</w:t></w:r>`;
             }
-            newRuns += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(replacementText)}</w:t></w:r>`;
+            newRuns += createRunsFromReplacement(replacementText);
             if (afterText) {
                 newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(afterText)}</w:t></w:r>`;
             }
         } else {
             // Final fallback: Chỉ thay thế phần text, không xóa toàn bộ paragraph
             console.log(`📝 Final fallback: giữ nguyên paragraph, chỉ đổi nội dung text`);
-            newRuns = `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(replacementText)}</w:t></w:r>`;
+            newRuns = createRunsFromReplacement(replacementText);
         }
     }
 
@@ -187,8 +270,10 @@ const replaceTextInParagraph = (
 const findAndReplaceInDocument = (
     documentXml: string,
     originalText: string,
-    replacementText: string
+    rawReplacementText: string
 ): { result: string; replaced: boolean } => {
+
+    const replacementText = stripMarkdown(rawReplacementText);
 
     // QUAN TRỌNG: Chỉ cắt ngắn text để TÌM KIẾM, KHÔNG cắt ngắn replacementText
     let searchText = originalText;
@@ -417,23 +502,27 @@ const fallbackReplaceBody = async (
             const sectPrMatch = bodyContent.match(/<w:sectPr[\s\S]*?<\/w:sectPr>/);
             const sectPr = sectPrMatch ? sectPrMatch[0] : '';
 
-            // Tạo paragraphs từ fixedContent
-            const paragraphs = fixedContent.split('\n').map(line => {
+            const cleanFixedContent = deepUnescapeXml(stripMarkdown(fixedContent));
+
+            // Tạo paragraphs từ cleanFixedContent
+            const paragraphs = cleanFixedContent.split('\n').map(line => {
                 if (!line.trim()) {
                     return '<w:p><w:r><w:t></w:t></w:r></w:p>';
                 }
 
+                // Deep unescape line trước khi xử lý thẻ <red>
+                const cleanLine = deepUnescapeXml(line);
                 // Xử lý thẻ <red> trong line
                 let runsXml = '';
                 let currentIndex = 0;
                 const redOpenTag = '<red>';
                 const redCloseTag = '</red>';
 
-                while (currentIndex < line.length) {
-                    const openIndex = line.indexOf(redOpenTag, currentIndex);
+                while (currentIndex < cleanLine.length) {
+                    const openIndex = cleanLine.indexOf(redOpenTag, currentIndex);
 
                     if (openIndex === -1) {
-                        const remaining = line.substring(currentIndex);
+                        const remaining = cleanLine.substring(currentIndex);
                         if (remaining) {
                             runsXml += `<w:r><w:t xml:space="preserve">${escapeXml(remaining)}</w:t></w:r>`;
                         }
@@ -441,18 +530,18 @@ const fallbackReplaceBody = async (
                     }
 
                     if (openIndex > currentIndex) {
-                        const normalText = line.substring(currentIndex, openIndex);
+                        const normalText = cleanLine.substring(currentIndex, openIndex);
                         runsXml += `<w:r><w:t xml:space="preserve">${escapeXml(normalText)}</w:t></w:r>`;
                     }
 
-                    const closeIndex = line.indexOf(redCloseTag, openIndex);
+                    const closeIndex = cleanLine.indexOf(redCloseTag, openIndex);
                     if (closeIndex === -1) {
-                        const remaining = line.substring(openIndex + redOpenTag.length);
+                        const remaining = cleanLine.substring(openIndex + redOpenTag.length);
                         runsXml += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(remaining)}</w:t></w:r>`;
                         break;
                     }
 
-                    const redText = line.substring(openIndex + redOpenTag.length, closeIndex);
+                    const redText = cleanLine.substring(openIndex + redOpenTag.length, closeIndex);
                     runsXml += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(redText)}</w:t></w:r>`;
 
                     currentIndex = closeIndex + redCloseTag.length;

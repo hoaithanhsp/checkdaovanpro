@@ -550,6 +550,7 @@ Sửa SKKN theo danh sách lỗi. GIỮ NGUYÊN định dạng gốc (bold, ital
 - fixedContent PHẢI chứa TOÀN BỘ nội dung gốc (đã sửa lỗi), KHÔNG ĐƯỢC bỏ bớt hay lược bỏ bất kỳ đoạn nào.
 - Chỉ thay đổi những chỗ có lỗi, phần còn lại giữ nguyên 100%.
 - Bọc mỗi chỗ đã sửa trong thẻ <red>...</red>.
+- TUYỆT ĐỐI KHÔNG dùng Markdown formatting: KHÔNG dùng **, *, #, ##, - , bullet points. Chỉ dùng text thuần và thẻ <red>.</red>.
 
 ## LỖI CẦN SỬA:
 
@@ -923,6 +924,7 @@ Sửa chữa SKKN theo các vấn đề trên. Với mỗi vấn đề:
 3. Giữ nguyên 100% phần không liên quan đến vấn đề
 4. Nội dung mới phải chất lượng: có trích dẫn, lý thuyết, số liệu cụ thể
 5. Sử dụng ngôn ngữ khoa học, phù hợp SKKN giáo dục
+6. TUYỆT ĐỐI KHÔNG dùng Markdown formatting: KHÔNG dùng **, *, #, ##, - , bullet points. Chỉ dùng text thuần và thẻ <red>...</red>.
 
 ## OUTPUT JSON:
 {
