@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { SKKNInput, AnalysisResult, TitleAnalysisResult, AIRiskDetails, ImprovementAnalysisResult, AutoImprovementFixResult, DetectedIssue } from "../types";
+import { SKKNInput, AnalysisResult, TitleAnalysisResult, AIRiskDetails, ImprovementAnalysisResult, AutoImprovementFixResult, DetectedIssue, AIReductionResult } from "../types";
 import {
   hasAnyKey,
   isQuotaOrRateLimitError,
@@ -975,6 +975,185 @@ Sửa chữa SKKN theo các vấn đề trên. Với mỗi vấn đề:
         }
       } catch (error: any) {
         console.warn(`[ImprovementFix] Model ${model} thất bại:`, error.message);
+        lastError = error;
+
+        if (isModelNotFoundError(error)) {
+          continue;
+        }
+
+        if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
+          markKeyExhausted(apiKey);
+          const nextKey = getNextApiKey();
+          if (nextKey) {
+            apiKey = nextKey;
+            break;
+          } else {
+            throw new Error(getVietnameseErrorMessage(error));
+          }
+        }
+      }
+    }
+    if (!lastError || (!isQuotaOrRateLimitError(lastError) && !isInvalidKeyError(lastError))) {
+      break;
+    }
+  }
+
+  throw lastError || new Error("Tất cả các model đều thất bại. Vui lòng thử lại sau.");
+};
+
+// ========== AI REDUCTION ==========
+
+/**
+ * Giảm độ AI cho SKKN
+ * Áp dụng 5 kỹ thuật humanizing dựa trên chỉ số AI đã phân tích
+ * Mục tiêu: AI Score < 20%
+ */
+export const reduceAIContent = async (
+  originalContent: string,
+  aiRiskDetails: AIRiskDetails,
+  aiRiskScore: number,
+  intensity: 'light' | 'medium' | 'aggressive' = 'medium'
+): Promise<AIReductionResult> => {
+  const selectedModel = getModel();
+  const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
+
+  const truncatedContent = originalContent.length > 50000
+    ? originalContent.substring(0, 50000)
+    : originalContent;
+
+  const intensityConfig = {
+    light: { keepPercent: 90, desc: 'Sửa nhẹ - giữ 90% nguyên bản, chỉ sửa các pattern AI rõ ràng nhất' },
+    medium: { keepPercent: 70, desc: 'Sửa trung bình - viết lại 30% nội dung, đa dạng hóa mạnh' },
+    aggressive: { keepPercent: 50, desc: 'Sửa mạnh - viết lại 50%+ nội dung, đảm bảo AI score < 15%' },
+  };
+  const config = intensityConfig[intensity];
+
+  const prompt = `
+Bạn là chuyên gia humanizing văn bản - chuyên biến nội dung do AI tạo thành văn bản giống như người viết.
+
+## PHÂN TÍCH AI HIỆN TẠI (từ hệ thống phát hiện AI):
+- AI Score tổng: ${aiRiskScore}% (mục tiêu: < 20%)
+- Perplexity Score: ${aiRiskDetails.perplexityScore}/100 (${aiRiskDetails.perplexityScore < 40 ? 'THẤP - từ vựng dễ đoán, đặc trưng AI' : 'OK'})
+- Burstiness Score: ${aiRiskDetails.burstinessScore}/100 (${aiRiskDetails.burstinessScore < 40 ? 'THẤP - câu đều đặn, đặc trưng AI' : 'OK'})
+- Pattern Density: ${aiRiskDetails.patternDensity}/100 (${aiRiskDetails.patternDensity > 30 ? 'CAO - nhiều mẫu câu AI' : 'OK'})
+- Overall AI Percent: ${aiRiskDetails.overallAIPercent}%
+
+### Các mẫu câu AI phát hiện được:
+${(aiRiskDetails.suspiciousPatterns || []).map((p, i) => `${i + 1}. "${p}"`).join('\n')}
+
+## CHẾ ĐỘ XỬ LÝ: ${intensity.toUpperCase()} - ${config.desc}
+
+## 5 KỸ THUẬT HUMANIZING (áp dụng TẤT CẢ):
+
+### KT1: SENTENCE RESTRUCTURING (Tái cấu trúc câu)
+- Tách câu dài (>30 từ) thành 2 câu ngắn tại điểm ngắt tự nhiên (dấu phẩy + "với", "trong đó", "bao gồm")
+- Ghép 2 câu ngắn (<15 từ) liên tiếp thành 1 câu dài bằng liên từ đa dạng ("và", "đồng thời", "bên cạnh đó")
+- Đảm bảo KHÔNG có 3 câu liên tiếp cùng độ dài (±5 từ)
+- Mục tiêu: CV (hệ số biến thiên) > 0.4
+
+### KT2: LEXICAL DIVERSIFICATION (Đa dạng hóa từ vựng)
+- Thay thế từ lặp lại trong 2 câu liên tiếp bằng từ đồng nghĩa:
+  + "giúp" → "tạo điều kiện", "hỗ trợ", "đóng góp vào"
+  + "phương pháp" → "biện pháp", "cách thức", "phương thức"
+  + "học sinh" → "người học", "học viên", "đối tượng nghiên cứu"
+  + "cho thấy" → "chứng tỏ", "minh chứng", "thể hiện"
+  + "nâng cao" → "cải thiện", "tối ưu hóa", "tăng cường"
+  + "hiệu quả" → "tính hiệu dụng", "kết quả khả quan", "tác động tích cực"
+- Không lặp cùng 1 danh từ chính trong 2 câu liên tiếp
+- Ưu tiên thay thế bằng từ có độ dài KHÁC với từ gốc (tăng perplexity)
+
+### KT3: SYNTACTIC VARIATION (Biến đổi cú pháp)
+- Chuyển 20-25% câu sang bị động: "Tôi tiến hành khảo sát" → "Khảo sát được tiến hành"
+- Đảo ngữ 10% câu: "Kết quả rất khả quan" → "Khả quan là kết quả đạt được"
+- Thay đổi chủ ngữ: "Tôi" → "Việc..." → "Quá trình..." → "Thực tế cho thấy..."
+- Xen kẽ liên từ: KHÔNG dùng cùng 1 liên từ quá 2 lần ("tuy nhiên" → "song" → "trái lại")
+
+### KT4: INFORMATION DENSITY ADJUSTMENT (Mật độ thông tin)
+- 30% câu nhiều info (số liệu cụ thể, chi tiết)
+- 40% câu trung bình (phân tích, mô tả)
+- 30% câu ít info (nhận xét ngắn, kết luận)
+- Thêm ngoặc đơn chú thích cho từ viết tắt lần đầu
+- Đa dạng cách trình bày số: "73.3%" → "73,3% (33/45 em)"
+
+### KT5: MICRO-VARIATION INJECTION (Vi biến đổi)
+- Thêm dấu hai chấm trước danh sách
+- Xen kẽ câu đơn (20%), câu ghép (30%), câu phức (50%)
+- Thêm trạng ngữ đầu câu đa dạng: "Thực tế,", "Đáng chú ý,", "Cần nhấn mạnh rằng"
+- Nominalization: 60% danh từ hóa, 40% động từ
+
+## QUY TẮC BẮT BUỘC:
+1. fixedContent phải chứa TOÀN BỘ nội dung SKKN (không bỏ sót)
+2. Bọc phần đã sửa trong thẻ <red>...</red>
+3. GIỮ NGUYÊN 100%: số liệu, kết quả nghiên cứu, tên riêng, tiêu đề
+4. GIỮ NGUYÊN ý nghĩa khoa học - chỉ thay đổi CÁCH DIỄN ĐẠT
+5. TUYỆT ĐỐI KHÔNG dùng Markdown (**, *, #, ##). Chỉ text thuần + <red>
+6. XÓA TẤT CẢ các mẫu câu AI đã phát hiện ở trên
+7. Mục tiêu AI Score sau sửa: < 20%
+
+## NỘI DUNG GỐC:
+${truncatedContent}
+
+## OUTPUT JSON:
+{
+  "fixedContent": "TOÀN BỘ nội dung đã humanize, bọc chỗ sửa trong <red>...</red>",
+  "changes": [
+    {
+      "technique": "sentence_restructure|lexical_diversify|syntactic_variation|density_adjust|micro_variation",
+      "techniqueName": "Tên kỹ thuật tiếng Việt",
+      "original": "Đoạn gốc (50-80 ký tự)",
+      "fixed": "Đoạn đã sửa",
+      "reason": "Lý do sửa"
+    }
+  ],
+  "stats": {
+    "sentencesRestructured": <số câu đã tái cấu trúc>,
+    "wordsReplaced": <số từ đã thay thế>,
+    "patternsRemoved": <số pattern AI đã xóa>,
+    "syntacticChanges": <số biến đổi cú pháp>,
+    "microVariations": <số vi biến đổi>
+  },
+  "beforeMetrics": {
+    "aiScore": ${aiRiskScore},
+    "perplexity": ${aiRiskDetails.perplexityScore},
+    "burstiness": ${aiRiskDetails.burstinessScore},
+    "patternDensity": ${aiRiskDetails.patternDensity}
+  },
+  "afterMetrics": {
+    "estimatedAIScore": <dự kiến AI score sau sửa, mục tiêu < 20>,
+    "estimatedPerplexity": <dự kiến perplexity sau sửa, mục tiêu > 50>,
+    "estimatedBurstiness": <dự kiến burstiness sau sửa, mục tiêu > 50>,
+    "estimatedPatternDensity": <dự kiến pattern density sau sửa, mục tiêu < 15>
+  }
+}
+
+Chỉ liệt kê tối đa 15 changes quan trọng nhất, đại diện cho 5 kỹ thuật.
+`;
+
+  let lastError: Error | null = null;
+  let apiKey = getApiKeyOrThrow();
+
+  while (apiKey) {
+    const ai = new GoogleGenAI({ apiKey });
+
+    for (const model of modelsToTry) {
+      try {
+        console.log(`[AIReduction] Key ...${apiKey.slice(-6)} | Model: ${model} | Intensity: ${intensity}`);
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.4, // Hơi cao để tạo sự đa dạng
+          },
+        });
+
+        if (response.text) {
+          return JSON.parse(response.text) as AIReductionResult;
+        } else {
+          throw new Error("Empty response from Gemini");
+        }
+      } catch (error: any) {
+        console.warn(`[AIReduction] Model ${model} thất bại:`, error.message);
         lastError = error;
 
         if (isModelNotFoundError(error)) {
