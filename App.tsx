@@ -25,6 +25,7 @@ const App: React.FC = () => {
   const [hasApiKey, setHasApiKey] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState<{ username: string; displayName: string } | null>(null);
+  const [progress, setProgress] = useState(0);
   const currentInputRef = useRef<SKKNInput | null>(null);
 
   // Kiểm tra đăng nhập và API key khi load
@@ -66,14 +67,34 @@ const App: React.FC = () => {
   const handleSubmit = async (data: SKKNInput) => {
     setStatus(AnalysisStatus.LOADING);
     setErrorMsg(null);
+    setProgress(0);
     currentInputRef.current = data;
+
+    // Simulate progress bar since AI generation takes time
+    const progressInterval = setInterval(() => {
+      setProgress((prev) => {
+        if (prev < 40) return prev + Math.floor(Math.random() * 5) + 3; // 0-40%: fast
+        if (prev < 70) return prev + Math.floor(Math.random() * 3) + 2; // 40-70%: medium 
+        if (prev < 90) return prev + 1; // 70-90%: slow
+        if (prev < 98) return prev + 0.5; // 90-98%: very slow
+        return prev;
+      });
+    }, 1000);
+
     try {
       const analysis = await analyzeSKKNWithGemini(data);
-      setResult(analysis);
-      setStatus(AnalysisStatus.SUCCESS);
-      // Tự động lưu vào lịch sử
-      saveToHistory(data, analysis);
+      clearInterval(progressInterval);
+      setProgress(100);
+
+      // Small delay so user can see 100%
+      setTimeout(() => {
+        setResult(analysis);
+        setStatus(AnalysisStatus.SUCCESS);
+        // Tự động lưu vào lịch sử
+        saveToHistory(data, analysis);
+      }, 500);
     } catch (error: any) {
+      clearInterval(progressInterval);
       console.error(error);
       setStatus(AnalysisStatus.ERROR);
       setErrorMsg(error.message || "Đã xảy ra lỗi trong quá trình phân tích. Vui lòng kiểm tra API Key hoặc thử lại sau.");
@@ -84,6 +105,7 @@ const App: React.FC = () => {
     setStatus(AnalysisStatus.IDLE);
     setResult(null);
     setErrorMsg(null);
+    setProgress(0);
     currentInputRef.current = null;
   };
 
@@ -341,9 +363,35 @@ const App: React.FC = () => {
             <div className="relative w-24 h-24 mb-6">
               <div className="absolute top-0 left-0 w-full h-full border-4 border-blue-200 rounded-full"></div>
               <div className="absolute top-0 left-0 w-full h-full border-4 border-blue-600 rounded-full animate-spin border-t-transparent"></div>
+              {/* Progress text inside the spinner */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="font-bold text-blue-700 text-lg">{Math.floor(progress)}%</span>
+              </div>
             </div>
             <h3 className="text-2xl font-bold text-gray-800 animate-pulse">Đang thẩm định SKKN...</h3>
             <p className="text-gray-500 mt-2 max-w-md text-center">Hệ thống đang đối chiếu với cơ sở dữ liệu, kiểm tra lỗi ngữ pháp và tính toán điểm số sáng tạo.</p>
+
+            {/* Progress Bar Container */}
+            <div className="w-full max-w-md mt-8">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-medium text-blue-600">Tiến độ phân tích</span>
+                <span className="text-sm font-bold text-blue-800">{Math.floor(progress)}%</span>
+              </div>
+              <div className="w-full bg-blue-100 rounded-full h-3 overflow-hidden shadow-inner">
+                <div
+                  className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full transition-all duration-700 ease-out relative"
+                  style={{ width: `${progress}%` }}
+                >
+                  <div className="absolute inset-0 bg-white/20 animate-[shimmer_2s_infinite]"></div>
+                </div>
+              </div>
+              <p className="text-xs text-center text-gray-400 mt-3 italic">
+                {progress < 30 && "Đang đọc nội dung và phân tích cấu trúc..."}
+                {progress >= 30 && progress < 60 && "Đang đối chiếu dữ liệu đạo văn..."}
+                {progress >= 60 && progress < 90 && "Đang đánh giá tiêu chí khoa học & tính mới..."}
+                {progress >= 90 && "Đang tổng hợp điểm số và hoàn thiện báo cáo..."}
+              </p>
+            </div>
           </div>
         )}
 
