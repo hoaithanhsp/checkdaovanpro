@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { SKKNInput, AnalysisResult, TitleAnalysisResult, AIRiskDetails, ImprovementAnalysisResult, AutoImprovementFixResult, DetectedIssue, AIReductionResult } from "../types";
+import { getHistory } from './historyService';
 import {
   hasAnyKey,
   isQuotaOrRateLimitError,
@@ -251,12 +252,32 @@ export const analyzeSKKNWithGemini = async (input: SKKNInput): Promise<AnalysisR
   const selectedModel = getModel();
   const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
 
+  let historyPrompt = "";
+  try {
+    const history = getHistory();
+    const prevItem = history.find(item =>
+      item.input.title.toLowerCase().trim() === input.title.toLowerCase().trim() &&
+      item.input.subject === input.subject
+    );
+    if (prevItem && prevItem.result && prevItem.result.scores) {
+      const prevScore = prevItem.result.scores.total;
+      historyPrompt = `
+⚠️ QUY ĐỊNH CHẤM ĐIỂM BẢN CẬP NHẬT:
+Hệ thống nhận diện đây là phiên bản cập nhật của đề tài "${input.title}". Điểm lần chấm trước là: ${prevScore} điểm.
+YÊU CẦU BẮT BUỘC KHẮT KHE: Nếu bản văn này đã có sự cải thiện, chỉnh sửa các lỗi chữ đỏ, lời văn tự nhiên hơn và giải quyết các điểm yếu, bạn PHẢI cho tổng điểm (\`scores.total\`) CAO HƠN bản trước ít nhất 1 đến 2 điểm (nếu bản trước chưa đạt tối đa). Hãy tính toán các tiêu chí thành phần cẩn thận để đảm bảo điểm tổng mới thỏa mãn điều kiện > ${prevScore}. Đây là luật cứng của hệ thống đảm bảo hợp tình hợp lý.
+`;
+    }
+  } catch (e) {
+    console.error("Lỗi đọc lịch sử:", e);
+  }
+
   const prompt = `
     Phân tích SKKN sau đây:
     - Tên đề tài: ${input.title}
     - Cấp học: ${input.level}
     - Môn học: ${input.subject}
     - Mục tiêu giải: ${input.target}
+${historyPrompt}
     - Nội dung: ${input.content}
   `;
 
@@ -550,7 +571,13 @@ ${(analysisResult.aiRiskDetails.suspiciousPatterns || []).slice(0, 5).map((p, i)
   const prompt = `
 Sửa SKKN theo danh sách lỗi. GIỮ NGUYÊN định dạng gốc (bold, italic, bảng, công thức).
 
-⚠️ QUY TẮC QUAN TRỌNG:
+⚠️ QUY TẮC VĂN PHONG VÀ TRÁNH ĐẠO VĂN (BẮT BUỘC):
+- Viết theo giọng văn giáo viên thực tế: Dùng số liệu thực tế số lẻ (vd: 31/45 em, tránh số tròn trịa), diễn đạt tự nhiên, xen kẽ quan sát cá nhân và thừa nhận các khó khăn/hạn chế khi thực hiện.
+- Trích dẫn: Paraphrase lý thuyết thay vì trích nguyên văn, luôn gắn kết lý thuyết với ngữ cảnh địa phương/lớp học.
+- Đa dạng cấu trúc câu: Thay đổi độ dài câu, xen kẽ liên từ đa dạng, sử dụng trạng từ và cấu trúc chủ bị động linh hoạt.
+- KHÔNG thay đổi hoặc bắt lỗi sai đối với các từ viết tắt hợp lệ được dùng phổ biến: KHBG, ĐGTX, NCBH, HSG, CSDL, KTTX, THPT, GDĐT, UBND, HĐND, BGD, SỞ, PHÒNG, THCS, TP, VN, SGK, GV, HS, BGH, CMHS, CNTT, SKKN, PPCT, KHGD, KHDH, NQ, TW, BGDĐT, ĐSVN, COVID, WHO, UNESCO, ASEAN.
+
+⚠️ QUY TẮC KIỂM SOÁT ĐỊNH DẠNG:
 - fixedContent PHẢI chứa TOÀN BỘ nội dung gốc (đã sửa lỗi), KHÔNG ĐƯỢC bỏ bớt hay lược bỏ bất kỳ đoạn nào.
 - Chỉ thay đổi những chỗ có lỗi, phần còn lại giữ nguyên 100%.
 - Bọc mỗi chỗ đã sửa trong thẻ <red>...</red>.
@@ -922,7 +949,12 @@ Sửa chữa SKKN theo các vấn đề trên. Với mỗi vấn đề:
 - Nếu actionType = "correct_errors": Sửa các lỗi chính tả/ngữ pháp
 - Nếu actionType = "add_details": Bổ sung chi tiết vào phần hiện có
 
-⚠️ QUY TẮC:
+⚠️ QUY TẮC VĂN PHONG "GIÁO VIÊN THỰC TIỄN" VÀ NGHIỆP VỤ:
+- Áp dụng các nguyên tắc từ \`improvementDatabase.ts\` và \`loi chinh ta.txt\`. Đảm bảo đáp ứng đầy đủ yêu cầu khoa học (có kết quả định lượng, bằng chứng, hạn chế, điều kiện áp dụng...).
+- Giọng văn: Sử dụng giọng điệu cá nhân tự nhiên của giáo viên, dùng số liệu thực tế lẻ (vd 17.8%, 31/45 học sinh), đan xen mô tả khó khăn thực tế, paraphrase lý thuyết cho phù hợp thực tiễn.
+- Từ viết tắt chuyên ngành GIỮ NGUYÊN (không thay đổi, không sửa thành chữ thường): KHBG, ĐGTX, NCBH, HSG, CSDL, KTTX, THPT, GDĐT, UBND, HĐND, BGD, SỞ, PHÒNG, THCS, TP, VN, SGK, GV, HS, BGH, CMHS, CNTT, SKKN, PPCT, KHGD, KHDH, NQ, TW, BGDĐT, ĐSVN, COVID, WHO, UNESCO, ASEAN.
+
+⚠️ QUY TẮC KIỂM SOÁT ĐỊNH DẠNG:
 1. fixedContent phải chứa TOÀN BỘ nội dung SKKN đã sửa
 2. Bọc chỗ đã sửa/thêm mới trong thẻ <red>...</red>
 3. Giữ nguyên 100% phần không liên quan đến vấn đề
@@ -1084,6 +1116,7 @@ ${(aiRiskDetails.suspiciousPatterns || []).map((p, i) => `${i + 1}. "${p}"`).joi
 - Thêm trạng ngữ đầu câu đa dạng nhưng bình dân: "Thực tế cho thấy,", "Có thể thấy,", "Qua quá trình giảng dạy,"
 - LỖI CÓ KIỂM SOÁT: Thỉnh thoảng (khoảng 3-5%) hãy tạo ra một diễn đạt hơi lặp từ, hoặc dùng những từ ngữ rất "đời thường", giản dị để giảm tính "học thuật bóng bẩy" của AI.
 - Xen kẽ câu đơn, ghép, phức một cách ngẫu nhiên. Bỏ tư duy đối xứng. Đừng cố làm cấu trúc câu trở nên quá gọn gàng và hoàn hảo.
+- KHÔNG thay đổi các từ viết tắt chuyên ngành sau: KHBG, ĐGTX, NCBH, HSG, CSDL, KTTX, THPT, GDĐT, UBND, HĐND, BGD, SỞ, PHÒNG, THCS, TP, VN, SGK, GV, HS, BGH, CMHS, CNTT, SKKN, PPCT, KHGD, KHDH, NQ, TW, BGDĐT, ĐSVN, COVID, WHO, UNESCO, ASEAN.
 
 ## QUY TẮC BẮT BUỘC:
 1. fixedContent phải chứa TOÀN BỘ nội dung SKKN (không bỏ sót)
