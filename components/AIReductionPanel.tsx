@@ -226,6 +226,17 @@ const AIReductionPanel: React.FC<AIReductionPanelProps> = ({
                                 </div>
                             )}
 
+                            {/* Disclaimer */}
+                            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200 flex items-start gap-3">
+                                <AlertCircle className="text-blue-600 mt-0.5 shrink-0" size={18} />
+                                <div>
+                                    <h4 className="text-sm font-bold text-blue-800 dark:text-blue-300">Lưu ý về Điểm AI (AI Score)</h4>
+                                    <p className="text-xs text-blue-700/80 dark:text-blue-400 mt-1 leading-relaxed">
+                                        Điểm AI là con số <b>dự đoán xác suất</b> dựa trên thuật toán (tính bất ngờ và độ đa dạng). Việc sử dụng tính năng humanizing có thể làm cho văn bản mượt mà, cấu trúc tốt hơn và đôi khi khiến các công cụ quét AI <b>nhận diện nhầm là AI cấp cao</b>. Điều quan trọng nhất là nội dung đã được làm mới, diễn đạt tự nhiên và giảm thiểu các mẫu câu rập khuôn (pattern).
+                                    </p>
+                                </div>
+                            </div>
+
                             {/* Intensity Selection */}
                             <div>
                                 <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
