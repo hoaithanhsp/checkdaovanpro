@@ -97,17 +97,21 @@ Bạn cũng PHẢI phân tích xem SKKN có dấu hiệu được viết bởi A
 4. **Overall AI Percent (0-100)**: Phần trăm tổng thể khả năng văn bản do AI tạo.
 
 ### Ngưỡng đánh giá:
-- **< 15%**: An toàn (Thấp) - Ít khả năng AI
-- **15-35%**: Rủi ro thấp (Trung bình) - Có thể có một số đoạn AI
-- **35-60%**: Rủi ro cao (Cao) - Nhiều dấu hiệu AI
-- **> 60%**: Rủi ro nghiêm trọng (Rất cao) - Gần như chắc chắn AI
+- **< 15%**: An toàn (Thấp) - Ít khả năng AI, hành văn tự nhiên, có cảm xúc con người.
+- **15-35%**: Rủi ro thấp (Trung bình) - Có thể có một số đoạn AI hỗ trợ nhưng đã được biên tập kỹ.
+- **35-60%**: Rủi ro cao (Cao) - Nhiều dấu hiệu AI rõ rệt, thiếu sự gắn kết thực tế.
+- **> 60%**: Rủi ro nghiêm trọng (Rất cao) - Gần như chắc chắn 100% copy từ AI thô.
 
-### Các mẫu câu đặc trưng AI cần kiểm tra:
+### Các mẫu câu đặc trưng AI (Raw AI) cần kiểm tra:
 - ChatGPT: "trong bối cảnh... hiện nay", "theo định hướng... chương trình", "việc... là yêu cầu cấp thiết", "tuy nhiên... thực tế cho thấy", "không chỉ... mà còn"
 - Gemini: "điều này cho thấy... rằng", "một cách... hiệu quả", "đáng chú ý là", "cần lưu ý rằng"
 - Claude: "điều đáng chú ý là", "một điểm đáng xem xét", "có thể tranh luận rằng"
 
-CHẤM ĐIỂM NGHIÊM KHẮC: Nếu văn bản có burstiness thấp (câu đều đặn), perplexity thấp (từ vựng dễ đoán), nhiều pattern AI → aiRiskScore phải CAO.
+⚠️ LƯU Ý QUAN TRỌNG KHI CHẤM ĐIỂM AI:
+1. KHÔNG đánh đồng "văn bản trơn tru, logic chặt chẽ" với "văn bản AI". Một người giáo viên giỏi hoàn toàn có thể viết ra một SKKN với cấu trúc xuất sắc, không lỗi chính tả.
+2. Dấu hiệu cốt lõi của "AI thô" (Raw AI) là sự vô hồn, thiếu ví dụ thực tiễn sinh động mang tính cá nhân, và quá lạm dụng các từ nối mang tính chuyển ý (tuy nhiên, do đó, tóm lại, đáng chú ý là...).
+3. Nếu văn bản có cấu trúc câu đa dạng (lúc ngắn lúc dài), từ vựng phong phú nhưng giản dị (không đao to búa lớn), đôi khi có cách diễn đạt hơi "đời thường" hoặc lặp từ nhẹ một cách tự nhiên -> ĐÂY LÀ NGƯỜI VIẾT (hoặc đã được humanize rất tốt) -> Chấm AI Score THẤP.
+4. Chỉ cho aiRiskScore > 50% khi bạn thực sự thấy sự máy móc, lặp lại các pattern rập khuôn và thiếu chiều sâu thực tế.
 `;
 
 const RESPONSE_SCHEMA: Schema = {
@@ -1046,10 +1050,10 @@ ${(aiRiskDetails.suspiciousPatterns || []).map((p, i) => `${i + 1}. "${p}"`).joi
 ## 5 KỸ THUẬT HUMANIZING (áp dụng TẤT CẢ):
 
 ### KT1: SENTENCE RESTRUCTURING (Tái cấu trúc câu)
-- Tách câu dài (>30 từ) thành 2 câu ngắn tại điểm ngắt tự nhiên (dấu phẩy + "với", "trong đó", "bao gồm")
-- Ghép 2 câu ngắn (<15 từ) liên tiếp thành 1 câu dài bằng liên từ đa dạng ("và", "đồng thời", "bên cạnh đó")
-- Đảm bảo KHÔNG có 3 câu liên tiếp cùng độ dài (±5 từ)
-- Mục tiêu: CV (hệ số biến thiên) > 0.4
+- Tách câu dài (>30 từ) thành 2 câu ngắn tại điểm ngắt tự nhiên.
+- Ghép 2 câu ngắn (<15 từ) liên tiếp thành 1 câu dài bằng liên từ đa dạng.
+- QUAN TRỌNG: Cố tình để lại một vài câu hơi dài hoặc lặp cấu trúc một cách tự nhiên (đặc trưng của giáo viên viết SKKN). Không cần chia tỉ lệ độ dài câu hoàn hảo. Mọi thứ phải ngẫu nhiên.
+- Mục tiêu: Tạo Burstiness cao (độ đột biến về chiều dài câu lớn).
 
 ### KT2: LEXICAL DIVERSIFICATION (Đa dạng hóa từ vựng)
 - Thay thế từ lặp lại trong 2 câu liên tiếp bằng từ đồng nghĩa:
@@ -1075,11 +1079,11 @@ ${(aiRiskDetails.suspiciousPatterns || []).map((p, i) => `${i + 1}. "${p}"`).joi
 - Thêm ngoặc đơn chú thích cho từ viết tắt lần đầu
 - Đa dạng cách trình bày số: "73.3%" → "73,3% (33/45 em)"
 
-### KT5: MICRO-VARIATION INJECTION (Vi biến đổi)
-- Thêm dấu hai chấm trước danh sách
-- Xen kẽ câu đơn (20%), câu ghép (30%), câu phức (50%)
-- Thêm trạng ngữ đầu câu đa dạng: "Thực tế,", "Đáng chú ý,", "Cần nhấn mạnh rằng"
-- Nominalization: 60% danh từ hóa, 40% động từ
+### KT5: MICRO-VARIATION INJECTION (Vi biến đổi) & NHIỄU CÓ CHỦ Ý (Intentional Noise)
+- Thêm dấu hai chấm trước danh sách.
+- Thêm trạng ngữ đầu câu đa dạng nhưng bình dân: "Thực tế cho thấy,", "Có thể thấy,", "Qua quá trình giảng dạy,"
+- LỖI CÓ KIỂM SOÁT: Thỉnh thoảng (khoảng 3-5%) hãy tạo ra một diễn đạt hơi lặp từ, hoặc dùng những từ ngữ rất "đời thường", giản dị để giảm tính "học thuật bóng bẩy" của AI.
+- Xen kẽ câu đơn, ghép, phức một cách ngẫu nhiên. Bỏ tư duy đối xứng. Đừng cố làm cấu trúc câu trở nên quá gọn gàng và hoàn hảo.
 
 ## QUY TẮC BẮT BUỘC:
 1. fixedContent phải chứa TOÀN BỘ nội dung SKKN (không bỏ sót)
@@ -1143,7 +1147,7 @@ Chỉ liệt kê tối đa 15 changes quan trọng nhất, đại diện cho 5 k
           contents: prompt,
           config: {
             responseMimeType: "application/json",
-            temperature: 0.4, // Hơi cao để tạo sự đa dạng
+            temperature: 0.8, // Tăng lên 0.8 để tạo sự ngẫu nhiên, tránh pattern AI cứng nhắc
           },
         });
 
