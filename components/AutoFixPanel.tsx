@@ -9,8 +9,7 @@ import {
     Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell,
     WidthType, AlignmentType, ShadingType
 } from 'docx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// jspdf & jspdf-autotable: dynamic import trong handleExportReportPdf
 
 interface AutoFixPanelProps {
     isOpen: boolean;
@@ -394,6 +393,9 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
         if (!result) return;
         setIsExporting(true);
         try {
+            // Dynamic import để tránh lỗi Vite/Rollup build
+            const { default: jsPDF } = await import('jspdf');
+            const { default: autoTable } = await import('jspdf-autotable');
             const doc = new jsPDF('p', 'mm', 'a4');
 
             // Tiêu đề
