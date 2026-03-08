@@ -378,7 +378,11 @@ export const injectFixesToDocx = async (
         console.log(` Số lượng replacements: ${replacements.length}`);
 
         // 1. Giải nén file DOCX
-        const zip = await JSZip.loadAsync(originalFile.arrayBuffer.slice(0));
+        // Đảm bảo arrayBuffer là ArrayBuffer thực sự (có thể bị mất prototype qua React state)
+        const buffer = originalFile.arrayBuffer instanceof ArrayBuffer
+            ? originalFile.arrayBuffer
+            : new Uint8Array(originalFile.arrayBuffer as any).buffer;
+        const zip = await JSZip.loadAsync(buffer);
 
         // 2. Đọc document.xml
         const documentXmlFile = zip.file('word/document.xml');
@@ -511,7 +515,11 @@ const fallbackReplaceBody = async (
     try {
         console.log(' Fallback: Thay thế toàn bộ body...');
 
-        const zip = await JSZip.loadAsync(originalFile.arrayBuffer.slice(0));
+        // Đảm bảo arrayBuffer là ArrayBuffer thực sự (có thể bị mất prototype qua React state)
+        const buffer = originalFile.arrayBuffer instanceof ArrayBuffer
+            ? originalFile.arrayBuffer
+            : new Uint8Array(originalFile.arrayBuffer as any).buffer;
+        const zip = await JSZip.loadAsync(buffer);
 
         const documentXmlFile = zip.file('word/document.xml');
         if (!documentXmlFile) {

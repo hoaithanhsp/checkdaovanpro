@@ -304,17 +304,20 @@ ${historyPrompt}
 
         if (response.text) {
           const parsed = JSON.parse(response.text) as AnalysisResult;
-          // Cap điểm thành phần theo max và tính lại tổng
-          if (parsed.scores) {
-            parsed.scores.innovation = Math.min(parsed.scores.innovation, 30);
-            parsed.scores.feasibility = Math.min(parsed.scores.feasibility, 40);
-            parsed.scores.scientific = Math.min(parsed.scores.scientific, 20);
-            parsed.scores.presentation = Math.min(parsed.scores.presentation, 10);
-            parsed.scores.total = Math.min(
-              parsed.scores.innovation + parsed.scores.feasibility + parsed.scores.scientific + parsed.scores.presentation,
-              100
-            );
+          // Đảm bảo scores tồn tại
+          if (!parsed.scores) {
+            parsed.scores = { innovation: 0, feasibility: 0, scientific: 0, presentation: 0, total: 0 };
           }
+          // Cap điểm thành phần theo max và tính lại tổng
+          // Dùng Number() || 0 để xử lý khi Gemini trả về undefined/null/string
+          parsed.scores.innovation = Math.min(Number(parsed.scores.innovation) || 0, 30);
+          parsed.scores.feasibility = Math.min(Number(parsed.scores.feasibility) || 0, 40);
+          parsed.scores.scientific = Math.min(Number(parsed.scores.scientific) || 0, 20);
+          parsed.scores.presentation = Math.min(Number(parsed.scores.presentation) || 0, 10);
+          parsed.scores.total = Math.min(
+            parsed.scores.innovation + parsed.scores.feasibility + parsed.scores.scientific + parsed.scores.presentation,
+            100
+          );
           return parsed;
         } else {
           throw new Error("Empty response from Gemini");
