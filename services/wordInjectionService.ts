@@ -15,7 +15,7 @@ export interface OriginalDocxFile {
 export interface ReplacementSegment {
     original: string;
     replacement: string;
-    type: 'plagiarism' | 'spelling' | 'structure' | 'vocabulary';
+    type: 'plagiarism' | 'spelling' | 'structure' | 'vocabulary' | 'ai_detection' | 'rewrite';
 }
 
 /**
@@ -142,7 +142,11 @@ const replaceTextInParagraph = (
     const firstRPrMatch = paragraphXml.match(/<w:r>[\s\S]*?<w:rPr>([\s\S]*?)<\/w:rPr>[\s\S]*?<w:t/);
     const originalRPrContent = firstRPrMatch ? firstRPrMatch[1] : '';
     // Loại bỏ w:color khỏi rPr gốc (để không conflict khi thêm màu đỏ)
-    const baseRPrContent = originalRPrContent.replace(/<w:color[^/]*\/>/g, '').trim();
+    // Match cả self-closing <w:color ... /> VÀ dạng có closing tag <w:color ...>...</w:color>
+    const baseRPrContent = originalRPrContent
+        .replace(/<w:color[^>]*\/>/g, '')
+        .replace(/<w:color[^>]*>.*?<\/w:color>/g, '')
+        .trim();
     const baseRPr = baseRPrContent ? `<w:rPr>${baseRPrContent}</w:rPr>` : '';
 
     // Bước 5: Luôn tìm vị trí chính xác của đoạn text cần sửa trong paragraph
@@ -159,7 +163,8 @@ const replaceTextInParagraph = (
     const makeRun = (text: string, extraRPr?: string): string => {
         let rPrXml = '';
         if (baseRPrContent || extraRPr) {
-            rPrXml = `<w:rPr>${baseRPrContent}${extraRPr || ''}</w:rPr>`;
+            // extraRPr (màu đỏ) đặt TRƯỚC baseRPrContent để được ưu tiên
+            rPrXml = `<w:rPr>${extraRPr || ''}${baseRPrContent}</w:rPr>`;
         }
         return `<w:r>${rPrXml}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
     };
@@ -473,11 +478,19 @@ export const injectFixedContentToDocx = async (
 
     // Nếu có changes, chuyển đổi format và sử dụng XML Injection
     if (changes && changes.length > 0) {
-        const replacements: ReplacementSegment[] = changes.map(c => ({
-            original: c.original,
-            replacement: c.fixed,
-            type: c.type as ReplacementSegment['type']
-        }));
+        const replacements: ReplacementSegment[] = changes.map(c => {
+            // Nếu c.fixed chưa có <red> tags, wrap toàn bộ trong <red>
+            // Vì Gemini chỉ đặt <red> trong fixedContent, không trong changes[].fixed
+            let fixedWithRed = c.fixed;
+            if (!fixedWithRed.includes('<red>') && !fixedWithRed.includes('&lt;red&gt;')) {
+                fixedWithRed = `<red>${fixedWithRed}</red>`;
+            }
+            return {
+                original: c.original,
+                replacement: fixedWithRed,
+                type: c.type as ReplacementSegment['type']
+            };
+        });
 
         return injectFixesToDocx(originalFile, replacements);
     }
