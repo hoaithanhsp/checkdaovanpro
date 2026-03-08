@@ -303,7 +303,19 @@ ${historyPrompt}
         });
 
         if (response.text) {
-          return JSON.parse(response.text) as AnalysisResult;
+          const parsed = JSON.parse(response.text) as AnalysisResult;
+          // Cap điểm thành phần theo max và tính lại tổng
+          if (parsed.scores) {
+            parsed.scores.innovation = Math.min(parsed.scores.innovation, 30);
+            parsed.scores.feasibility = Math.min(parsed.scores.feasibility, 40);
+            parsed.scores.scientific = Math.min(parsed.scores.scientific, 20);
+            parsed.scores.presentation = Math.min(parsed.scores.presentation, 10);
+            parsed.scores.total = Math.min(
+              parsed.scores.innovation + parsed.scores.feasibility + parsed.scores.scientific + parsed.scores.presentation,
+              100
+            );
+          }
+          return parsed;
         } else {
           throw new Error("Empty response from Gemini");
         }
