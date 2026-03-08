@@ -355,7 +355,7 @@ export const injectFixesToDocx = async (
         console.log(` Số lượng replacements: ${replacements.length}`);
 
         // 1. Giải nén file DOCX
-        const zip = await JSZip.loadAsync(originalFile.arrayBuffer);
+        const zip = await JSZip.loadAsync(originalFile.arrayBuffer.slice(0));
 
         // 2. Đọc document.xml
         const documentXmlFile = zip.file('word/document.xml');
@@ -480,7 +480,7 @@ const fallbackReplaceBody = async (
     try {
         console.log(' Fallback: Thay thế toàn bộ body...');
 
-        const zip = await JSZip.loadAsync(originalFile.arrayBuffer);
+        const zip = await JSZip.loadAsync(originalFile.arrayBuffer.slice(0));
 
         const documentXmlFile = zip.file('word/document.xml');
         if (!documentXmlFile) {
