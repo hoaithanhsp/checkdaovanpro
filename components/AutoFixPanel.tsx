@@ -1,10 +1,16 @@
 import React, { useState } from 'react';
-import { X, Wand2, Check, FileText, AlertCircle, Copy, Download, ChevronDown, ChevronUp, FileEdit } from 'lucide-react';
+import { X, Wand2, Check, FileText, AlertCircle, Copy, Download, ChevronDown, ChevronUp, FileEdit, FileBarChart } from 'lucide-react';
 import { autoFixSKKN, AutoFixResult } from '../services/geminiService';
 import { AnalysisResult, OriginalDocxFile } from '../types';
-import { injectFixesToDocx, replaceFullContent, ReplacementSegment, injectFixedContentToDocx } from '../services/wordInjectionService';
+import { injectFixesToDocx, ReplacementSegment, injectFixedContentToDocx } from '../services/wordInjectionService';
 import { normalizeVietnameseText } from '../services/textNormalizerService';
 import FileSaver from 'file-saver';
+import {
+    Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell,
+    WidthType, AlignmentType, ShadingType
+} from 'docx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface AutoFixPanelProps {
     isOpen: boolean;
@@ -201,25 +207,58 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
     };
 
     /**
+     * Strip markdown và <red> tags để xuất file sạch
+     */
+    const stripMdAndRed = (str: string): string => {
+        let s = str
+            .replace(/\*\*(.*?)\*\*/g, '$1')
+            .replace(/(^|\n)\*\s/g, '$1- ')
+            .replace(/\*/g, '');
+        // Xóa tag <red>
+        s = s.replace(/<red>/g, '').replace(/<\/red>/g, '');
+        // Deep unescape HTML entities
+        for (let i = 0; i < 5; i++) {
+            const next = s
+                .replace(/&amp;/g, '&')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"')
+                .replace(/&apos;/g, "'");
+            if (next === s) break;
+            s = next;
+        }
+        // Xóa lại tag <red> sau unescape
+        s = s.replace(/<red>/g, '').replace(/<\/red>/g, '');
+        return s;
+    };
+
+    /**
      * Xuất Word với XML Injection (giữ nguyên OLE Objects, hình ảnh, công thức)
-     * Chỉ thay thế các đoạn text cụ thể với màu đỏ
+     * KHÔNG bôi đỏ phần đã sửa - chỉ thay thế text sạch
      */
     const handleExportWithInjection = async () => {
         if (!result || !originalDocx) return;
 
         setIsExporting(true);
         try {
-            // Sử dụng XML Injection: truyền danh sách changes để tìm và thay thế text cụ thể
-            // Giữ nguyên tất cả cấu trúc gốc (OLE, hình ảnh, bảng, công thức MathType)
+            // Xóa <red> tags và markdown trước khi truyền vào injection
+            // Để file Word xuất ra KHÔNG bôi đỏ phần đã sửa
+            const cleanChanges = result.changes.map(c => ({
+                original: stripMdAndRed(c.original),
+                fixed: stripMdAndRed(c.fixed),
+                type: c.type,
+            }));
+            const cleanFixedContent = stripMdAndRed(result.fixedContent);
+
             const blob = await injectFixedContentToDocx(
                 originalDocx,
-                result.fixedContent,
-                result.changes  // Truyền danh sách thay đổi cụ thể
+                cleanFixedContent,
+                cleanChanges
             );
             const newFileName = originalDocx.fileName.replace('.docx', '_DA_SUA.docx');
             FileSaver.saveAs(blob, newFileName);
 
-            console.log('✓ Xuất thành công với XML Injection, giữ nguyên OLE objects');
+            console.log('✓ Xuất thành công với XML Injection (không bôi đỏ), giữ nguyên OLE objects');
         } catch (err: any) {
             console.error('Xuất Word thất bại:', err);
             setError(`Không thể xuất file Word: ${err.message}`);
@@ -236,13 +275,191 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
 
         setIsExporting(true);
         try {
-            // Tạo blob từ nội dung text
             const blob = new Blob([result.fixedContent], { type: 'text/plain' });
             FileSaver.saveAs(blob, 'SKKN_DA_SUA.txt');
-
             console.log('✓ Đã xuất file text');
         } catch (err: any) {
             setError(`Không thể xuất file: ${err.message}`);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    /**
+     * Xuất báo cáo dạng Word (.docx)
+     */
+    const handleExportReportWord = async () => {
+        if (!result) return;
+        setIsExporting(true);
+        try {
+            const children: (Paragraph | Table)[] = [];
+
+            // Tiêu đề
+            children.push(new Paragraph({
+                children: [new TextRun({ text: 'BÁO CÁO SỬA CHỮA SKKN TỰ ĐỘNG', bold: true, size: 32, font: 'Times New Roman' })],
+                heading: HeadingLevel.HEADING_1,
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 300 },
+            }));
+
+            children.push(new Paragraph({
+                children: [new TextRun({ text: `Ngày xuất: ${new Date().toLocaleDateString('vi-VN')}`, size: 22, font: 'Times New Roman', italics: true })],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 200 },
+            }));
+
+            // Bảng tổng hợp
+            children.push(new Paragraph({
+                children: [new TextRun({ text: 'TỔNG HỢP KẾT QUẢ SỬA CHỮA', bold: true, size: 26, font: 'Times New Roman' })],
+                heading: HeadingLevel.HEADING_2,
+                spacing: { before: 300, after: 150 },
+            }));
+
+            const summaryHeaderRow = new TableRow({
+                children: ['Hạng mục', 'Số lượng'].map(text =>
+                    new TableCell({
+                        children: [new Paragraph({ children: [new TextRun({ text, bold: true, size: 22, font: 'Times New Roman' })] })],
+                        shading: { type: ShadingType.SOLID, color: 'D9D9D9' },
+                        width: { size: 50, type: WidthType.PERCENTAGE },
+                    })
+                ),
+            });
+
+            const summaryData = [
+                ['Lỗi chính tả đã sửa', `${result.summary.spellingFixed}`],
+                ['Đoạn đạo văn viết lại', `${result.summary.plagiarismRewritten}`],
+                ['Câu cải thiện cấu trúc', `${result.summary.structureImproved}`],
+                ['Từ vựng nâng cấp', `${result.summary.vocabularyEnhanced}`],
+                ['Đoạn giảm AI', `${result.summary.aiRiskReduced ?? 0}`],
+                ['Tổng thay đổi', `${result.changes.length}`],
+            ];
+
+            const summaryRows = summaryData.map(([label, value]) =>
+                new TableRow({
+                    children: [
+                        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: label, size: 22, font: 'Times New Roman' })] })], width: { size: 60, type: WidthType.PERCENTAGE } }),
+                        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: value, size: 22, font: 'Times New Roman', bold: true })] })], width: { size: 40, type: WidthType.PERCENTAGE } }),
+                    ],
+                })
+            );
+
+            children.push(new Table({ rows: [summaryHeaderRow, ...summaryRows], width: { size: 100, type: WidthType.PERCENTAGE } }));
+
+            // Chi tiết thay đổi
+            children.push(new Paragraph({
+                children: [new TextRun({ text: 'CHI TIẾT CÁC THAY ĐỔI', bold: true, size: 26, font: 'Times New Roman' })],
+                heading: HeadingLevel.HEADING_2,
+                spacing: { before: 300, after: 150 },
+            }));
+
+            const detailHeaderRow = new TableRow({
+                children: ['STT', 'Loại', 'Nội dung gốc', 'Nội dung đã sửa', 'Lý do'].map((text, idx) =>
+                    new TableCell({
+                        children: [new Paragraph({ children: [new TextRun({ text, bold: true, size: 20, font: 'Times New Roman' })] })],
+                        shading: { type: ShadingType.SOLID, color: 'D9D9D9' },
+                        width: { size: idx === 0 ? 5 : idx === 4 ? 20 : 25, type: WidthType.PERCENTAGE },
+                    })
+                ),
+            });
+
+            const detailRows = result.changes.map((change, i) => {
+                const typeLabel = getTypeLabel(change.type);
+                return new TableRow({
+                    children: [
+                        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: `${i + 1}`, size: 20, font: 'Times New Roman' })] })], width: { size: 5, type: WidthType.PERCENTAGE } }),
+                        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: typeLabel.text, size: 20, font: 'Times New Roman' })] })], width: { size: 10, type: WidthType.PERCENTAGE } }),
+                        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: (change.original || '').substring(0, 200), size: 20, font: 'Times New Roman' })] })], width: { size: 30, type: WidthType.PERCENTAGE } }),
+                        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: stripMdAndRed(change.fixed || '').substring(0, 200), size: 20, font: 'Times New Roman' })] })], width: { size: 30, type: WidthType.PERCENTAGE } }),
+                        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: change.reason || '', size: 20, font: 'Times New Roman' })] })], width: { size: 25, type: WidthType.PERCENTAGE } }),
+                    ],
+                });
+            });
+
+            children.push(new Table({ rows: [detailHeaderRow, ...detailRows], width: { size: 100, type: WidthType.PERCENTAGE } }));
+
+            const doc = new Document({ sections: [{ properties: {}, children }] });
+            const blob = await Packer.toBlob(doc);
+            FileSaver.saveAs(blob, `Bao_cao_sua_SKKN_${new Date().toISOString().slice(0, 10)}.docx`);
+        } catch (err: any) {
+            setError(`Không thể xuất báo cáo: ${err.message}`);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    /**
+     * Xuất báo cáo dạng PDF
+     */
+    const handleExportReportPdf = async () => {
+        if (!result) return;
+        setIsExporting(true);
+        try {
+            const doc = new jsPDF('p', 'mm', 'a4');
+
+            // Tiêu đề
+            doc.setFontSize(18);
+            doc.setFont('helvetica', 'bold');
+            doc.text('BAO CAO SUA CHUA SKKN TU DONG', doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
+
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'italic');
+            doc.text(`Ngay xuat: ${new Date().toLocaleDateString('vi-VN')}`, doc.internal.pageSize.getWidth() / 2, 28, { align: 'center' });
+
+            // Bảng tổng hợp
+            doc.setFontSize(13);
+            doc.setFont('helvetica', 'bold');
+            doc.text('TONG HOP KET QUA', 14, 40);
+
+            autoTable(doc, {
+                startY: 44,
+                head: [['Hang muc', 'So luong']],
+                body: [
+                    ['Loi chinh ta da sua', `${result.summary.spellingFixed}`],
+                    ['Doan dao van viet lai', `${result.summary.plagiarismRewritten}`],
+                    ['Cau cai thien cau truc', `${result.summary.structureImproved}`],
+                    ['Tu vung nang cap', `${result.summary.vocabularyEnhanced}`],
+                    ['Doan giam AI', `${result.summary.aiRiskReduced ?? 0}`],
+                    ['Tong thay doi', `${result.changes.length}`],
+                ],
+                styles: { fontSize: 10 },
+                headStyles: { fillColor: [100, 100, 100] },
+            });
+
+            // Bảng chi tiết
+            const finalY = (doc as any).lastAutoTable?.finalY || 100;
+            doc.setFontSize(13);
+            doc.setFont('helvetica', 'bold');
+            doc.text('CHI TIET CAC THAY DOI', 14, finalY + 10);
+
+            const detailBody = result.changes.map((change, i) => {
+                const typeLabel = getTypeLabel(change.type);
+                return [
+                    `${i + 1}`,
+                    typeLabel.text,
+                    (change.original || '').substring(0, 100),
+                    stripMdAndRed(change.fixed || '').substring(0, 100),
+                    change.reason || '',
+                ];
+            });
+
+            autoTable(doc, {
+                startY: finalY + 14,
+                head: [['STT', 'Loai', 'Noi dung goc', 'Noi dung da sua', 'Ly do']],
+                body: detailBody,
+                styles: { fontSize: 8, cellPadding: 2 },
+                headStyles: { fillColor: [100, 100, 100] },
+                columnStyles: {
+                    0: { cellWidth: 10 },
+                    1: { cellWidth: 20 },
+                    2: { cellWidth: 55 },
+                    3: { cellWidth: 55 },
+                    4: { cellWidth: 40 },
+                },
+            });
+
+            doc.save(`Bao_cao_sua_SKKN_${new Date().toISOString().slice(0, 10)}.pdf`);
+        } catch (err: any) {
+            setError(`Không thể xuất PDF: ${err.message}`);
         } finally {
             setIsExporting(false);
         }
@@ -405,6 +622,26 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
                                         <div className="text-2xl font-bold text-orange-600">{result.summary.aiRiskReduced ?? 0}</div>
                                         <div className="text-sm text-gray-500">Đoạn giảm AI</div>
                                     </div>
+                                </div>
+
+                                {/* Nút xuất báo cáo */}
+                                <div className="flex flex-wrap gap-3 pt-2">
+                                    <button
+                                        onClick={handleExportReportWord}
+                                        disabled={isExporting}
+                                        className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                                    >
+                                        <FileBarChart size={16} />
+                                        {isExporting ? 'Đang xuất...' : 'Xuất báo cáo Word (.docx)'}
+                                    </button>
+                                    <button
+                                        onClick={handleExportReportPdf}
+                                        disabled={isExporting}
+                                        className="flex items-center gap-1.5 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                                    >
+                                        <FileText size={16} />
+                                        {isExporting ? 'Đang xuất...' : 'Xuất báo cáo PDF'}
+                                    </button>
                                 </div>
                             </div>
 
