@@ -137,6 +137,14 @@ const replaceTextInParagraph = (
     const pPrMatch = paragraphXml.match(/<w:pPr>[\s\S]*?<\/w:pPr>/);
     const pPr = pPrMatch ? pPrMatch[0] : '';
 
+    // Bước 4b: Trích xuất rPr (run properties) từ run đầu tiên để giữ font gốc
+    // Tìm <w:rPr>...</w:rPr> từ run đầu tiên chứa text
+    const firstRPrMatch = paragraphXml.match(/<w:r>[\s\S]*?<w:rPr>([\s\S]*?)<\/w:rPr>[\s\S]*?<w:t/);
+    const originalRPrContent = firstRPrMatch ? firstRPrMatch[1] : '';
+    // Loại bỏ w:color khỏi rPr gốc (để không conflict khi thêm màu đỏ)
+    const baseRPrContent = originalRPrContent.replace(/<w:color[^/]*\/>/g, '').trim();
+    const baseRPr = baseRPrContent ? `<w:rPr>${baseRPrContent}</w:rPr>` : '';
+
     // Bước 5: Luôn tìm vị trí chính xác của đoạn text cần sửa trong paragraph
     // và giữ lại text trước/sau dù là sửa nhỏ hay viết lại toàn bộ
     const regex = new RegExp(
@@ -147,7 +155,17 @@ const replaceTextInParagraph = (
 
     let newRuns = '';
 
+    // Helper: tạo 1 run XML giữ font gốc
+    const makeRun = (text: string, extraRPr?: string): string => {
+        let rPrXml = '';
+        if (baseRPrContent || extraRPr) {
+            rPrXml = `<w:rPr>${baseRPrContent}${extraRPr || ''}</w:rPr>`;
+        }
+        return `<w:r>${rPrXml}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
+    };
+
     // Helper để parse replacementText chứa <red>...</red> và tạo ra các XML runs
+    // GIỮ NGUYÊN font gốc (rPr) cho tất cả runs
     const createRunsFromReplacement = (rawText: string): string => {
         if (!rawText) return '';
 
@@ -165,25 +183,25 @@ const replaceTextInParagraph = (
             if (openIndex === -1) {
                 const remaining = text.substring(currentIndex);
                 if (remaining) {
-                    runsXml += `<w:r><w:t xml:space="preserve">${escapeXml(remaining)}</w:t></w:r>`;
+                    runsXml += makeRun(remaining);
                 }
                 break;
             }
 
             if (openIndex > currentIndex) {
                 const normalText = text.substring(currentIndex, openIndex);
-                runsXml += `<w:r><w:t xml:space="preserve">${escapeXml(normalText)}</w:t></w:r>`;
+                runsXml += makeRun(normalText);
             }
 
             const closeIndex = text.indexOf(redCloseTag, openIndex);
             if (closeIndex === -1) {
                 const remaining = text.substring(openIndex + redOpenTag.length);
-                runsXml += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(remaining)}</w:t></w:r>`;
+                runsXml += makeRun(remaining, '<w:color w:val="FF0000"/>');
                 break;
             }
 
             const redText = text.substring(openIndex + redOpenTag.length, closeIndex);
-            runsXml += `<w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">${escapeXml(redText)}</w:t></w:r>`;
+            runsXml += makeRun(redText, '<w:color w:val="FF0000"/>');
 
             currentIndex = closeIndex + redCloseTag.length;
         }
@@ -199,17 +217,17 @@ const replaceTextInParagraph = (
 
         console.log(`📝 Sửa chính xác: before=${beforeText.length}, matched=${match[0].length}, after=${afterText.length}`);
 
-        // Run 1: Text trước đoạn cần sửa (nếu có)
+        // Run 1: Text trước đoạn cần sửa (giữ font gốc)
         if (beforeText) {
-            newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(beforeText)}</w:t></w:r>`;
+            newRuns += makeRun(beforeText);
         }
 
-        // Run 2: Text đã sửa - Xử lý tag <red>
+        // Run 2: Text đã sửa - Xử lý tag <red> (giữ font gốc)
         newRuns += createRunsFromReplacement(replacementText);
 
-        // Run 3: Text sau đoạn cần sửa (nếu có)
+        // Run 3: Text sau đoạn cần sửa (giữ font gốc)
         if (afterText) {
-            newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(afterText)}</w:t></w:r>`;
+            newRuns += makeRun(afterText);
         }
     } else {
         // Fallback: nếu không match regex chính xác, thử dùng normalized matching
@@ -243,11 +261,11 @@ const replaceTextInParagraph = (
             console.log(`📝 Fallback normalized match: before=${beforeText.length}, after=${afterText.length}`);
 
             if (beforeText) {
-                newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(beforeText)}</w:t></w:r>`;
+                newRuns += makeRun(beforeText);
             }
             newRuns += createRunsFromReplacement(replacementText);
             if (afterText) {
-                newRuns += `<w:r><w:t xml:space="preserve">${escapeXml(afterText)}</w:t></w:r>`;
+                newRuns += makeRun(afterText);
             }
         } else {
             // Final fallback: Chỉ thay thế phần text, không xóa toàn bộ paragraph
