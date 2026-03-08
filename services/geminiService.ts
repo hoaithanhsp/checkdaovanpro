@@ -571,6 +571,19 @@ ${(analysisResult.aiRiskDetails.suspiciousPatterns || []).slice(0, 5).map((p, i)
   const prompt = `
 Sửa SKKN theo danh sách lỗi. GIỮ NGUYÊN định dạng gốc (bold, italic, bảng, công thức).
 
+🚫 QUY TẮC TUYỆT ĐỐI - KHÔNG ĐƯỢC THAY ĐỔI THÔNG TIN CÁ NHÂN:
+- TUYỆT ĐỐI GIỮ NGUYÊN 100% các thông tin sau, KHÔNG ĐƯỢC sửa, thay đổi hay "cập nhật":
+  + Năm học (vd: 2025-2026, 2024-2025... giữ ĐÚNG như bản gốc)
+  + Tên tác giả, họ tên
+  + Đơn vị công tác (tên trường, phòng, sở)
+  + Chức vụ, chức danh
+  + Địa chỉ, địa danh, tên xã/huyện/tỉnh/thành phố
+  + Tên tổ chuyên môn
+  + Số điện thoại, email
+  + Mã số, mã định danh
+  + Các mốc thời gian cụ thể (ngày, tháng, năm)
+- Đây là thông tin thực tế của tác giả, AI KHÔNG CÓ QUYỀN thay đổi.
+
 ⚠️ QUY TẮC VĂN PHONG VÀ TRÁNH ĐẠO VĂN (BẮT BUỘC):
 - Viết theo giọng văn giáo viên thực tế: Dùng số liệu thực tế số lẻ (vd: 31/45 em, tránh số tròn trịa), diễn đạt tự nhiên, xen kẽ quan sát cá nhân và thừa nhận các khó khăn/hạn chế khi thực hiện.
 - Trích dẫn: Paraphrase lý thuyết thay vì trích nguyên văn, luôn gắn kết lý thuyết với ngữ cảnh địa phương/lớp học.
@@ -949,6 +962,19 @@ Sửa chữa SKKN theo các vấn đề trên. Với mỗi vấn đề:
 - Nếu actionType = "correct_errors": Sửa các lỗi chính tả/ngữ pháp
 - Nếu actionType = "add_details": Bổ sung chi tiết vào phần hiện có
 
+🚫 QUY TẮC TUYỆT ĐỐI - KHÔNG ĐƯỢC THAY ĐỔI THÔNG TIN CÁ NHÂN:
+- TUYỆT ĐỐI GIỮ NGUYÊN 100% các thông tin sau, KHÔNG ĐƯỢC sửa, thay đổi hay "cập nhật":
+  + Năm học (vd: 2025-2026, 2024-2025... giữ ĐÚNG như bản gốc)
+  + Tên tác giả, họ tên
+  + Đơn vị công tác (tên trường, phòng, sở)
+  + Chức vụ, chức danh
+  + Địa chỉ, địa danh, tên xã/huyện/tỉnh/thành phố
+  + Tên tổ chuyên môn
+  + Số điện thoại, email
+  + Mã số, mã định danh
+  + Các mốc thời gian cụ thể (ngày, tháng, năm)
+- Đây là thông tin thực tế của tác giả, AI KHÔNG CÓ QUYỀN thay đổi.
+
 ⚠️ QUY TẮC VĂN PHONG "GIÁO VIÊN THỰC TIỄN" VÀ NGHIỆP VỤ:
 - Áp dụng các nguyên tắc từ \`improvementDatabase.ts\` và \`loi chinh ta.txt\`. Đảm bảo đáp ứng đầy đủ yêu cầu khoa học (có kết quả định lượng, bằng chứng, hạn chế, điều kiện áp dụng...).
 - Giọng văn: Sử dụng giọng điệu cá nhân tự nhiên của giáo viên, dùng số liệu thực tế lẻ (vd 17.8%, 31/45 học sinh), đan xen mô tả khó khăn thực tế, paraphrase lý thuyết cho phù hợp thực tiễn.
@@ -1117,6 +1143,17 @@ ${(aiRiskDetails.suspiciousPatterns || []).map((p, i) => `${i + 1}. "${p}"`).joi
 - LỖI CÓ KIỂM SOÁT: Thỉnh thoảng (khoảng 3-5%) hãy tạo ra một diễn đạt hơi lặp từ, hoặc dùng những từ ngữ rất "đời thường", giản dị để giảm tính "học thuật bóng bẩy" của AI.
 - Xen kẽ câu đơn, ghép, phức một cách ngẫu nhiên. Bỏ tư duy đối xứng. Đừng cố làm cấu trúc câu trở nên quá gọn gàng và hoàn hảo.
 - KHÔNG thay đổi các từ viết tắt chuyên ngành sau: KHBG, ĐGTX, NCBH, HSG, CSDL, KTTX, THPT, GDĐT, UBND, HĐND, BGD, SỞ, PHÒNG, THCS, TP, VN, SGK, GV, HS, BGH, CMHS, CNTT, SKKN, PPCT, KHGD, KHDH, NQ, TW, BGDĐT, ĐSVN, COVID, WHO, UNESCO, ASEAN.
+
+🚫 QUY TẮC TUYỆT ĐỐI - KHÔNG ĐƯỢC THAY ĐỔI THÔNG TIN CÁ NHÂN:
+- TUYỆT ĐỐI GIỮ NGUYÊN 100% các thông tin sau, KHÔNG ĐƯỢC sửa, thay đổi hay "cập nhật":
+  + Năm học (vd: 2025-2026, 2024-2025... giữ ĐÚNG như bản gốc)
+  + Tên tác giả, họ tên
+  + Đơn vị công tác (tên trường, phòng, sở)
+  + Chức vụ, chức danh
+  + Địa chỉ, địa danh, tên xã/huyện/tỉnh/thành phố
+  + Tên tổ chuyên môn
+  + Các mốc thời gian cụ thể (ngày, tháng, năm)
+- Đây là thông tin thực tế của tác giả, AI KHÔNG CÓ QUYỀN thay đổi.
 
 ## QUY TẮC BẮT BUỘC:
 1. fixedContent phải chứa TOÀN BỘ nội dung SKKN (không bỏ sót)
