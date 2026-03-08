@@ -387,79 +387,63 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
     };
 
     /**
-     * Xuất báo cáo dạng PDF
+     * Xuất báo cáo dạng PDF (qua HTML + Print)
      */
     const handleExportReportPdf = async () => {
         if (!result) return;
         setIsExporting(true);
         try {
-            // Dynamic import để tránh lỗi Vite/Rollup build
-            const { default: jsPDF } = await import('jspdf');
-            const { default: autoTable } = await import('jspdf-autotable');
-            const doc = new jsPDF('p', 'mm', 'a4');
+            // Tạo bảng tổng hợp HTML
+            const summaryRows = [
+                ['Lỗi chính tả đã sửa', `${result.summary.spellingFixed}`],
+                ['Đoạn đạo văn viết lại', `${result.summary.plagiarismRewritten}`],
+                ['Câu cải thiện cấu trúc', `${result.summary.structureImproved}`],
+                ['Từ vựng nâng cấp', `${result.summary.vocabularyEnhanced}`],
+                ['Đoạn giảm AI', `${result.summary.aiRiskReduced ?? 0}`],
+                ['Tổng thay đổi', `${result.changes.length}`],
+            ].map(([label, value]) => `<tr><td style="padding:8px;border:1px solid #ccc;">${label}</td><td style="padding:8px;border:1px solid #ccc;font-weight:bold;text-align:center;">${value}</td></tr>`).join('');
 
-            // Tiêu đề
-            doc.setFontSize(18);
-            doc.setFont('helvetica', 'bold');
-            doc.text('BAO CAO SUA CHUA SKKN TU DONG', doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
-
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'italic');
-            doc.text(`Ngay xuat: ${new Date().toLocaleDateString('vi-VN')}`, doc.internal.pageSize.getWidth() / 2, 28, { align: 'center' });
-
-            // Bảng tổng hợp
-            doc.setFontSize(13);
-            doc.setFont('helvetica', 'bold');
-            doc.text('TONG HOP KET QUA', 14, 40);
-
-            autoTable(doc, {
-                startY: 44,
-                head: [['Hang muc', 'So luong']],
-                body: [
-                    ['Loi chinh ta da sua', `${result.summary.spellingFixed}`],
-                    ['Doan dao van viet lai', `${result.summary.plagiarismRewritten}`],
-                    ['Cau cai thien cau truc', `${result.summary.structureImproved}`],
-                    ['Tu vung nang cap', `${result.summary.vocabularyEnhanced}`],
-                    ['Doan giam AI', `${result.summary.aiRiskReduced ?? 0}`],
-                    ['Tong thay doi', `${result.changes.length}`],
-                ],
-                styles: { fontSize: 10 },
-                headStyles: { fillColor: [100, 100, 100] },
-            });
-
-            // Bảng chi tiết
-            const finalY = (doc as any).lastAutoTable?.finalY || 100;
-            doc.setFontSize(13);
-            doc.setFont('helvetica', 'bold');
-            doc.text('CHI TIET CAC THAY DOI', 14, finalY + 10);
-
-            const detailBody = result.changes.map((change, i) => {
+            // Tạo bảng chi tiết HTML
+            const detailRows = result.changes.map((change, i) => {
                 const typeLabel = getTypeLabel(change.type);
-                return [
-                    `${i + 1}`,
-                    typeLabel.text,
-                    (change.original || '').substring(0, 100),
-                    stripMdAndRed(change.fixed || '').substring(0, 100),
-                    change.reason || '',
-                ];
-            });
+                return `<tr>
+                    <td style="padding:6px;border:1px solid #ccc;text-align:center;">${i + 1}</td>
+                    <td style="padding:6px;border:1px solid #ccc;">${typeLabel.text}</td>
+                    <td style="padding:6px;border:1px solid #ccc;font-size:11px;">${(change.original || '').substring(0, 150)}</td>
+                    <td style="padding:6px;border:1px solid #ccc;font-size:11px;">${stripMdAndRed(change.fixed || '').substring(0, 150)}</td>
+                    <td style="padding:6px;border:1px solid #ccc;font-size:11px;">${change.reason || ''}</td>
+                </tr>`;
+            }).join('');
 
-            autoTable(doc, {
-                startY: finalY + 14,
-                head: [['STT', 'Loai', 'Noi dung goc', 'Noi dung da sua', 'Ly do']],
-                body: detailBody,
-                styles: { fontSize: 8, cellPadding: 2 },
-                headStyles: { fillColor: [100, 100, 100] },
-                columnStyles: {
-                    0: { cellWidth: 10 },
-                    1: { cellWidth: 20 },
-                    2: { cellWidth: 55 },
-                    3: { cellWidth: 55 },
-                    4: { cellWidth: 40 },
-                },
-            });
+            const htmlContent = `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>Báo cáo Sửa chữa SKKN Tự động</title>
+<style>
+    body { font-family: 'Times New Roman', serif; font-size: 13pt; margin: 30px; color: #333; }
+    h1 { text-align: center; color: #1a1a1a; font-size: 18pt; }
+    h2 { color: #333; font-size: 14pt; margin-top: 24px; border-bottom: 2px solid #666; padding-bottom: 4px; }
+    .date { text-align: center; font-style: italic; color: #666; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+    th { background: #d9d9d9; padding: 8px; border: 1px solid #999; font-weight: bold; text-align: center; }
+    @media print { body { margin: 15mm; } }
+</style></head><body>
+<h1>BÁO CÁO SỬA CHỮA SKKN TỰ ĐỘNG</h1>
+<p class="date">Ngày xuất: ${new Date().toLocaleDateString('vi-VN')}</p>
+<h2>TỔNG HỢP KẾT QUẢ SỬA CHỮA</h2>
+<table><tr><th>Hạng mục</th><th>Số lượng</th></tr>${summaryRows}</table>
+<h2>CHI TIẾT CÁC THAY ĐỔI</h2>
+<table><tr><th>STT</th><th>Loại</th><th>Nội dung gốc</th><th>Nội dung đã sửa</th><th>Lý do</th></tr>${detailRows}</table>
+</body></html>`;
 
-            doc.save(`Bao_cao_sua_SKKN_${new Date().toISOString().slice(0, 10)}.pdf`);
+            const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const printWindow = window.open(url, '_blank');
+            if (printWindow) {
+                printWindow.onload = () => {
+                    printWindow.print();
+                    URL.revokeObjectURL(url);
+                };
+            }
         } catch (err: any) {
             setError(`Không thể xuất PDF: ${err.message}`);
         } finally {
