@@ -170,7 +170,6 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
       <div className="bg-white rounded-2xl shadow-lg p-8 border-l-8 border-blue-600 flex flex-col md:flex-row justify-between items-center gap-6">
         <div>
           <h2 className="text-3xl font-bold text-gray-800 mb-2">Kết quả Thẩm định SKKN</h2>
-          <p className="text-gray-500">Dựa trên tiêu chí Thông tư 27/2020/TT-BGDĐT</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">
