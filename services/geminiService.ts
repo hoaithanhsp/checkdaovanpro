@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { SKKNInput, AnalysisResult, TitleAnalysisResult, AIRiskDetails, ImprovementAnalysisResult, AutoImprovementFixResult, DetectedIssue, AIReductionResult } from "../types";
+import { SKKNInput, AnalysisResult, TitleAnalysisResult, AIRiskDetails, ImprovementAnalysisResult, AutoImprovementFixResult, DetectedIssue, AIReductionResult, QuickAIDetectionResult } from "../types";
 import { getHistory } from './historyService';
 import {
   hasAnyKey,
@@ -1147,15 +1147,121 @@ Sửa chữa SKKN theo các vấn đề trên. Với mỗi vấn đề:
 // ========== AI REDUCTION ==========
 
 /**
- * Giảm độ AI cho SKKN
- * Áp dụng 5 kỹ thuật humanizing dựa trên chỉ số AI đã phân tích
- * Mục tiêu: AI Score < 20%
+ * Kiểm tra nhanh AI score trên nội dung - dùng CÙNG tiêu chí với analyzeSKKNWithGemini
+ * Dùng để verify kết quả sau humanize, đảm bảo score nhất quán
+ */
+export const quickAIDetection = async (
+  content: string
+): Promise<QuickAIDetectionResult> => {
+  const selectedModel = getModel();
+  const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
+
+  // Giới hạn nội dung để giảm chi phí API
+  const truncated = content.length > 30000 ? content.substring(0, 30000) : content;
+
+  // Dùng CÙNG tiêu chí AI detection từ SYSTEM_INSTRUCTION (dòng 91-116)
+  const prompt = `
+Bạn là chuyên gia phát hiện văn bản AI. Phân tích nội dung sau và trả về JSON.
+
+## Các chỉ số phân tích (CÙNG tiêu chí với hệ thống phân tích SKKN chính):
+1. **Perplexity Score (0-100)**: Đánh giá mức độ "bất ngờ" của từ vựng. Văn bản AI thường có perplexity thấp (20-40). Văn bản người viết: 40-80+.
+2. **Burstiness Score (0-100)**: Đánh giá biến động độ dài câu. AI viết câu đều đặn (burstiness thấp). Người viết câu ngắn dài xen kẽ.
+3. **Pattern Density (0-100)**: Tỷ lệ các mẫu câu đặc trưng AI: "trong bối cảnh... hiện nay", "tuy nhiên, thực tế cho thấy", "không chỉ... mà còn", "qua đó... học sinh", "do đó... là rất cần thiết".
+4. **Overall AI Percent (0-100)**: Phần trăm tổng thể khả năng văn bản do AI tạo.
+
+### Ngưỡng đánh giá:
+- **< 15%**: An toàn (Thấp) - Ít khả năng AI, hành văn tự nhiên, có cảm xúc con người.
+- **15-35%**: Rủi ro thấp (Trung bình) - Có thể có một số đoạn AI hỗ trợ nhưng đã được biên tập kỹ.
+- **35-60%**: Rủi ro cao (Cao) - Nhiều dấu hiệu AI rõ rệt, thiếu sự gắn kết thực tế.
+- **> 60%**: Rủi ro nghiêm trọng (Rất cao) - Gần như chắc chắn 100% copy từ AI thô.
+
+### Các mẫu câu đặc trưng AI (Raw AI) cần kiểm tra:
+- ChatGPT: "trong bối cảnh... hiện nay", "theo định hướng... chương trình", "việc... là yêu cầu cấp thiết", "tuy nhiên... thực tế cho thấy", "không chỉ... mà còn"
+- Gemini: "điều này cho thấy... rằng", "một cách... hiệu quả", "đáng chú ý là", "cần lưu ý rằng"
+- Claude: "điều đáng chú ý là", "một điểm đáng xem xét", "có thể tranh luận rằng"
+
+⚠️ LƯU Ý QUAN TRỌNG:
+1. KHÔNG đánh đồng "văn bản trơn tru, logic chặt chẽ" với "văn bản AI". Một người giáo viên giỏi hoàn toàn có thể viết ra một SKKN với cấu trúc xuất sắc.
+2. Dấu hiệu cốt lõi của "AI thô" là sự vô hồn, thiếu ví dụ thực tiễn sinh động mang tính cá nhân, quá lạm dụng các từ nối.
+3. Nếu văn bản có cấu trúc câu đa dạng, từ vựng phong phú nhưng giản dị, đôi khi có cách diễn đạt hơi "đời thường" hoặc lặp từ nhẹ -> ĐÂY LÀ NGƯỜI VIẾT -> Chấm AI Score THẤP.
+4. Chỉ cho aiRiskScore > 50% khi bạn thực sự thấy sự máy móc, lặp lại các pattern rập khuôn.
+
+## NỘI DUNG CẦN PHÂN TÍCH:
+${truncated}
+
+## OUTPUT JSON (chỉ trả về JSON, không kèm giải thích):
+{
+  "aiRiskScore": <0-100>,
+  "perplexityScore": <0-100>,
+  "burstinessScore": <0-100>,
+  "patternDensity": <0-100>,
+  "overallAIPercent": <0-100>
+}
+`;
+
+  let lastError: Error | null = null;
+  let apiKey = getApiKeyOrThrow();
+
+  while (apiKey) {
+    const ai = new GoogleGenAI({ apiKey });
+
+    for (const model of modelsToTry) {
+      try {
+        console.log(`[QuickAIDetection] Key ...${apiKey.slice(-6)} | Model: ${model}`);
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.1, // Rất thấp = nhất quán với lần phân tích chính
+          },
+        });
+
+        if (response.text) {
+          return JSON.parse(response.text) as QuickAIDetectionResult;
+        } else {
+          throw new Error("Empty response from Gemini");
+        }
+      } catch (error: any) {
+        console.warn(`[QuickAIDetection] Model ${model} thất bại:`, error.message);
+        lastError = error;
+
+        if (isModelNotFoundError(error)) {
+          continue;
+        }
+
+        if (isQuotaOrRateLimitError(error) || isInvalidKeyError(error)) {
+          markKeyExhausted(apiKey);
+          const nextKey = getNextApiKey();
+          if (nextKey) {
+            apiKey = nextKey;
+            break;
+          } else {
+            throw new Error(getVietnameseErrorMessage(error));
+          }
+        }
+      }
+    }
+    if (!lastError || (!isQuotaOrRateLimitError(lastError) && !isInvalidKeyError(lastError))) {
+      break;
+    }
+  }
+
+  throw lastError || new Error("Không thể kiểm tra AI score. Thử lại sau.");
+};
+
+/**
+ * Giảm độ AI cho SKKN - CÓ SELF-VERIFY
+ * Sau khi humanize, tự kiểm tra lại bằng quickAIDetection (cùng tiêu chí với phân tích chính)
+ * Nếu score không giảm → tự động retry (tối đa 2 lần)
+ * Mục tiêu: AI Score khi check lại PHẢI thấp hơn trước
  */
 export const reduceAIContent = async (
   originalContent: string,
   aiRiskDetails: AIRiskDetails,
   aiRiskScore: number,
-  intensity: 'light' | 'medium' | 'aggressive' = 'medium'
+  intensity: 'light' | 'medium' | 'aggressive' = 'medium',
+  onProgress?: (step: string) => void
 ): Promise<AIReductionResult> => {
   const selectedModel = getModel();
   const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
@@ -1165,14 +1271,38 @@ export const reduceAIContent = async (
     : originalContent;
 
   const intensityConfig = {
-    light: { keepPercent: 90, desc: 'Sửa nhẹ - giữ 90% nguyên bản, chỉ sửa các pattern AI rõ ràng nhất' },
-    medium: { keepPercent: 70, desc: 'Sửa trung bình - viết lại 30% nội dung, đa dạng hóa mạnh' },
-    aggressive: { keepPercent: 50, desc: 'Sửa mạnh - viết lại 50%+ nội dung, đảm bảo AI score < 15%' },
+    light: { keepPercent: 90, desc: 'Sửa nhẹ - giữ 90% nguyên bản, chỉ sửa các pattern AI rõ ràng nhất', temp: 0.7 },
+    medium: { keepPercent: 70, desc: 'Sửa trung bình - viết lại 30% nội dung, đa dạng hóa mạnh', temp: 0.8 },
+    aggressive: { keepPercent: 50, desc: 'Sửa mạnh - viết lại 50%+ nội dung, đảm bảo AI score < 15%', temp: 0.9 },
   };
-  const config = intensityConfig[intensity];
 
-  const prompt = `
-Bạn là chuyên gia humanizing văn bản - chuyên biến nội dung do AI tạo thành văn bản giống như người viết.
+  const MAX_RETRIES = 2;
+  let bestResult: AIReductionResult | null = null;
+  let bestVerifiedScore = aiRiskScore; // Bắt đầu với score gốc
+  let retryCount = 0;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    // Tăng dần intensity khi retry
+    let currentIntensity = intensity;
+    if (attempt === 1 && intensity === 'light') currentIntensity = 'medium';
+    if (attempt === 1 && intensity === 'medium') currentIntensity = 'aggressive';
+    if (attempt === 2) currentIntensity = 'aggressive';
+    const config = intensityConfig[currentIntensity];
+
+    // Retry hint cho lần thử lại
+    const retryHint = attempt > 0 ? `
+
+⚠️ ĐÂY LÀ LẦN THỬ LẠI #${attempt + 1}. Lần trước AI score vẫn còn cao (${bestVerifiedScore}%)!
+Hãy MẠNH TAY hơn:
+- Viết lại NHIỀU câu hơn, KHÔNG giữ lại cấu trúc câu gốc
+- TUYỆT ĐỐI loại bỏ MỌI từ nối AI: "tuy nhiên", "do đó", "qua đó", "không chỉ...mà còn"
+- Dùng giọng văn BÌNH DÂN hơn, thêm diễn đạt "đời thường" kiểu giáo viên
+- Cố tình để câu hơi dài dòng, lặp ý nhẹ ở một số chỗ (như người thật viết)
+- Thay đổi cách mở đầu câu: bỏ hoàn toàn các mẫu "Việc...", "Điều này...", "Có thể thấy..."
+- KHÔNG viết quá mượt mà, quá học thuật, quá "hoàn hảo" - đây chính là dấu hiệu AI` : '';
+
+    const prompt = `
+Bạn là chuyên gia humanizing văn bản - chuyên biến nội dung do AI tạo thành văn bản giống như GIÁO VIÊN THỰC TẾ viết.
 
 ## PHÂN TÍCH AI HIỆN TẠI (từ hệ thống phát hiện AI):
 - AI Score tổng: ${aiRiskScore}% (mục tiêu: < 20%)
@@ -1184,7 +1314,8 @@ Bạn là chuyên gia humanizing văn bản - chuyên biến nội dung do AI t�
 ### Các mẫu câu AI phát hiện được:
 ${(aiRiskDetails.suspiciousPatterns || []).map((p, i) => `${i + 1}. "${p}"`).join('\n')}
 
-## CHẾ ĐỘ XỬ LÝ: ${intensity.toUpperCase()} - ${config.desc}
+## CHẾ ĐỘ XỬ LÝ: ${currentIntensity.toUpperCase()} - ${config.desc}
+${retryHint}
 
 ## 5 KỸ THUẬT HUMANIZING (áp dụng TẤT CẢ):
 
@@ -1218,23 +1349,16 @@ ${(aiRiskDetails.suspiciousPatterns || []).map((p, i) => `${i + 1}. "${p}"`).joi
 - Thêm ngoặc đơn chú thích cho từ viết tắt lần đầu
 - Đa dạng cách trình bày số: "73.3%" → "73,3% (33/45 em)"
 
-### KT5: MICRO-VARIATION INJECTION (Vi biến đổi) & NHIỄU CÓ CHỦ Ý (Intentional Noise)
+### KT5: MICRO-VARIATION INJECTION & NHIỄU CÓ CHỦ Ý
 - Thêm dấu hai chấm trước danh sách.
 - Thêm trạng ngữ đầu câu đa dạng nhưng bình dân: "Thực tế cho thấy,", "Có thể thấy,", "Qua quá trình giảng dạy,"
-- LỖI CÓ KIỂM SOÁT: Thỉnh thoảng (khoảng 3-5%) hãy tạo ra một diễn đạt hơi lặp từ, hoặc dùng những từ ngữ rất "đời thường", giản dị để giảm tính "học thuật bóng bẩy" của AI.
-- Xen kẽ câu đơn, ghép, phức một cách ngẫu nhiên. Bỏ tư duy đối xứng. Đừng cố làm cấu trúc câu trở nên quá gọn gàng và hoàn hảo.
-- KHÔNG thay đổi các từ viết tắt chuyên ngành sau: KHBG, ĐGTX, NCBH, HSG, CSDL, KTTX, THPT, GDĐT, UBND, HĐND, BGD, SỞ, PHÒNG, THCS, TP, VN, SGK, GV, HS, BGH, CMHS, CNTT, SKKN, PPCT, KHGD, KHDH, NQ, TW, BGDĐT, ĐSVN, COVID, WHO, UNESCO, ASEAN.
+- LỖI CÓ KIỂM SOÁT (5-8%): Tạo diễn đạt hơi lặp từ, dùng từ ngữ rất "đời thường", giản dị. Hãy viết như một giáo viên bình thường - KHÔNG QUÁ MƯỢT MÀ, KHÔNG QUÁ HỌC THUẬT.
+- TUYỆT ĐỐI KHÔNG viết "hoàn hảo" - văn bản quá hoàn hảo CHÍNH LÀ dấu hiệu AI lớn nhất.
+- Xen kẽ câu đơn, ghép, phức một cách ngẫu nhiên. Bỏ tư duy đối xứng.
+- KHÔNG thay đổi các từ viết tắt chuyên ngành: KHBG, ĐGTX, NCBH, HSG, CSDL, KTTX, THPT, GDĐT, UBND, HĐND, BGD, SỞ, PHÒNG, THCS, TP, VN, SGK, GV, HS, BGH, CMHS, CNTT, SKKN, PPCT, KHGD, KHDH, NQ, TW, BGDĐT, ĐSVN, COVID, WHO, UNESCO, ASEAN.
 
 🚫 QUY TẮC TUYỆT ĐỐI - KHÔNG ĐƯỢC THAY ĐỔI THÔNG TIN CÁ NHÂN:
-- TUYỆT ĐỐI GIỮ NGUYÊN 100% các thông tin sau, KHÔNG ĐƯỢC sửa, thay đổi hay "cập nhật":
-  + Năm học (vd: 2025-2026, 2024-2025... giữ ĐÚNG như bản gốc)
-  + Tên tác giả, họ tên
-  + Đơn vị công tác (tên trường, phòng, sở)
-  + Chức vụ, chức danh
-  + Địa chỉ, địa danh, tên xã/huyện/tỉnh/thành phố
-  + Tên tổ chuyên môn
-  + Các mốc thời gian cụ thể (ngày, tháng, năm)
-- Đây là thông tin thực tế của tác giả, AI KHÔNG CÓ QUYỀN thay đổi.
+- GIỮ NGUYÊN 100%: Năm học, Tên tác giả, Đơn vị công tác, Chức vụ, Địa chỉ, Tổ chuyên môn, Mốc thời gian.
 
 ## QUY TẮC BẮT BUỘC:
 1. fixedContent phải chứa TOÀN BỘ nội dung SKKN (không bỏ sót)
@@ -1284,6 +1408,81 @@ ${truncatedContent}
 Chỉ liệt kê tối đa 15 changes quan trọng nhất, đại diện cho 5 kỹ thuật.
 `;
 
+    // === Bước 1: Humanize ===
+    if (onProgress) onProgress(attempt > 0 ? `Đang thử lại lần ${attempt + 1}...` : 'Đang humanize nội dung...');
+    const humanizeResult = await _callGeminiForJSON<AIReductionResult>(prompt, modelsToTry, config.temp);
+    humanizeResult.fixedContent = preserveSchoolYears(originalContent, humanizeResult.fixedContent);
+
+    // === Bước 2: Self-verify bằng quickAIDetection ===
+    if (onProgress) onProgress('Đang kiểm tra lại AI score...');
+    try {
+      // Strip <red> tags trước khi verify
+      const cleanContent = humanizeResult.fixedContent.replace(/<red>/g, '').replace(/<\/red>/g, '');
+      const verification = await quickAIDetection(cleanContent);
+      const verifiedScore = verification.aiRiskScore;
+
+      console.log(`[AIReduction] Attempt ${attempt + 1}: Before=${aiRiskScore}% → Verified=${verifiedScore}% (Estimated=${humanizeResult.afterMetrics.estimatedAIScore}%)`);
+
+      // Cập nhật afterMetrics bằng score đã verify
+      humanizeResult.afterMetrics = {
+        estimatedAIScore: verifiedScore,
+        estimatedPerplexity: verification.perplexityScore,
+        estimatedBurstiness: verification.burstinessScore,
+        estimatedPatternDensity: verification.patternDensity,
+        verified: true,
+      };
+
+      // Lưu kết quả tốt nhất
+      if (verifiedScore < bestVerifiedScore || bestResult === null) {
+        bestVerifiedScore = verifiedScore;
+        bestResult = humanizeResult;
+        bestResult.retryCount = attempt;
+      }
+
+      // Nếu score đã giảm đáng kể → thành công, dừng retry
+      if (verifiedScore < aiRiskScore) {
+        console.log(`[AIReduction] ✅ Score giảm: ${aiRiskScore}% → ${verifiedScore}%. Dừng retry.`);
+        bestResult.retryCount = attempt;
+        return bestResult;
+      }
+
+      // Nếu score tăng hoặc không giảm → retry
+      console.log(`[AIReduction] ⚠️ Score chưa giảm (${verifiedScore}% >= ${aiRiskScore}%). Retry ${attempt + 1}/${MAX_RETRIES}...`);
+      retryCount = attempt + 1;
+
+    } catch (verifyError: any) {
+      // Nếu verify thất bại, vẫn return kết quả nhưng đánh dấu chưa verified
+      console.warn(`[AIReduction] Verify thất bại:`, verifyError.message);
+      humanizeResult.afterMetrics.verified = false;
+      if (!bestResult) {
+        bestResult = humanizeResult;
+        bestResult.retryCount = attempt;
+      }
+      // Không retry nếu verify fail - giữ kết quả hiện tại
+      break;
+    }
+  }
+
+  // Trả về kết quả tốt nhất sau N lần retry
+  if (bestResult) {
+    bestResult.retryCount = retryCount;
+    if (bestVerifiedScore >= aiRiskScore) {
+      bestResult.verificationWarning = `Sau ${retryCount + 1} lần tối ưu, AI score (${bestVerifiedScore}%) chưa giảm đáng kể so với trước (${aiRiskScore}%). Nội dung này có thể có đặc điểm khiến hệ thống AI detection nhận diện cao. Bạn có thể thử lại với chế độ "Mạnh" hoặc chỉnh sửa thủ công.`;
+    }
+    return bestResult;
+  }
+
+  throw new Error("Không thể giảm AI. Vui lòng thử lại sau.");
+};
+
+/**
+ * Helper: Gọi Gemini API trả về JSON (có xoay key + fallback model)
+ */
+const _callGeminiForJSON = async <T>(
+  prompt: string,
+  modelsToTry: string[],
+  temperature: number = 0.8
+): Promise<T> => {
   let lastError: Error | null = null;
   let apiKey = getApiKeyOrThrow();
 
@@ -1292,26 +1491,23 @@ Chỉ liệt kê tối đa 15 changes quan trọng nhất, đại diện cho 5 k
 
     for (const model of modelsToTry) {
       try {
-        console.log(`[AIReduction] Key ...${apiKey.slice(-6)} | Model: ${model} | Intensity: ${intensity}`);
+        console.log(`[GeminiJSON] Key ...${apiKey.slice(-6)} | Model: ${model}`);
         const response = await ai.models.generateContent({
           model,
           contents: prompt,
           config: {
             responseMimeType: "application/json",
-            temperature: 0.8, // Tăng lên 0.8 để tạo sự ngẫu nhiên, tránh pattern AI cứng nhắc
+            temperature,
           },
         });
 
         if (response.text) {
-          const parsed = JSON.parse(response.text) as AIReductionResult;
-          // Bảo vệ năm học: khôi phục nếu AI tự ý thay đổi
-          parsed.fixedContent = preserveSchoolYears(originalContent, parsed.fixedContent);
-          return parsed;
+          return JSON.parse(response.text) as T;
         } else {
           throw new Error("Empty response from Gemini");
         }
       } catch (error: any) {
-        console.warn(`[AIReduction] Model ${model} thất bại:`, error.message);
+        console.warn(`[GeminiJSON] Model ${model} thất bại:`, error.message);
         lastError = error;
 
         if (isModelNotFoundError(error)) {
