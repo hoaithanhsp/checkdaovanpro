@@ -206,15 +206,14 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
     };
 
     /**
-     * Strip markdown và <red> tags để xuất file sạch
+     * Strip markdown và HTML entities nhưng GIỮ LẠI <red> tags
+     * Tham khảo cách xử lý ở AIReductionPanel
      */
-    const stripMdAndRed = (str: string): string => {
+    const stripMd = (str: string): string => {
         let s = str
             .replace(/\*\*(.*?)\*\*/g, '$1')
             .replace(/(^|\n)\*\s/g, '$1- ')
             .replace(/\*/g, '');
-        // Xóa tag <red>
-        s = s.replace(/<red>/g, '').replace(/<\/red>/g, '');
         // Deep unescape HTML entities
         for (let i = 0; i < 5; i++) {
             const next = s
@@ -226,28 +225,27 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
             if (next === s) break;
             s = next;
         }
-        // Xóa lại tag <red> sau unescape
-        s = s.replace(/<red>/g, '').replace(/<\/red>/g, '');
+        // GIỮ NGUYÊN <red></red> tags để createRunsFromReplacement tạo chữ đỏ
         return s;
     };
 
     /**
      * Xuất Word với XML Injection (giữ nguyên OLE Objects, hình ảnh, công thức)
-     * KHÔNG bôi đỏ phần đã sửa - chỉ thay thế text sạch
+     * Phần đã sửa sẽ hiển thị MÀU ĐỎ nhờ <red> tags
      */
     const handleExportWithInjection = async () => {
         if (!result || !originalDocx) return;
 
         setIsExporting(true);
         try {
-            // Xóa <red> tags và markdown trước khi truyền vào injection
-            // Để file Word xuất ra KHÔNG bôi đỏ phần đã sửa
+            // Strip markdown nhưng GIỮ LẠI <red> tags
+            // để wordInjectionService tạo chữ đỏ cho phần sửa
             const cleanChanges = result.changes.map(c => ({
-                original: stripMdAndRed(c.original),
-                fixed: stripMdAndRed(c.fixed),
+                original: stripMd(c.original),
+                fixed: stripMd(c.fixed),
                 type: c.type,
             }));
-            const cleanFixedContent = stripMdAndRed(result.fixedContent);
+            const cleanFixedContent = stripMd(result.fixedContent);
 
             const blob = await injectFixedContentToDocx(
                 originalDocx,
@@ -257,7 +255,7 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
             const newFileName = originalDocx.fileName.replace('.docx', '_DA_SUA.docx');
             FileSaver.saveAs(blob, newFileName);
 
-            console.log('✓ Xuất thành công với XML Injection (không bôi đỏ), giữ nguyên OLE objects');
+            console.log('✓ Xuất thành công với XML Injection (phần sửa bôi đỏ), giữ nguyên OLE objects');
         } catch (err: any) {
             console.error('Xuất Word thất bại:', err);
             setError(`Không thể xuất file Word: ${err.message}`);
@@ -368,7 +366,7 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
                         new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: `${i + 1}`, size: 20, font: 'Times New Roman' })] })], width: { size: 5, type: WidthType.PERCENTAGE } }),
                         new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: typeLabel.text, size: 20, font: 'Times New Roman' })] })], width: { size: 10, type: WidthType.PERCENTAGE } }),
                         new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: (change.original || '').substring(0, 200), size: 20, font: 'Times New Roman' })] })], width: { size: 30, type: WidthType.PERCENTAGE } }),
-                        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: stripMdAndRed(change.fixed || '').substring(0, 200), size: 20, font: 'Times New Roman' })] })], width: { size: 30, type: WidthType.PERCENTAGE } }),
+                        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: stripMd(change.fixed || '').substring(0, 200), size: 20, font: 'Times New Roman' })] })], width: { size: 30, type: WidthType.PERCENTAGE } }),
                         new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: change.reason || '', size: 20, font: 'Times New Roman' })] })], width: { size: 25, type: WidthType.PERCENTAGE } }),
                     ],
                 });
@@ -410,7 +408,7 @@ const AutoFixPanel: React.FC<AutoFixPanelProps> = ({
                     <td style="padding:6px;border:1px solid #ccc;text-align:center;">${i + 1}</td>
                     <td style="padding:6px;border:1px solid #ccc;">${typeLabel.text}</td>
                     <td style="padding:6px;border:1px solid #ccc;font-size:11px;">${(change.original || '').substring(0, 150)}</td>
-                    <td style="padding:6px;border:1px solid #ccc;font-size:11px;">${stripMdAndRed(change.fixed || '').substring(0, 150)}</td>
+                    <td style="padding:6px;border:1px solid #ccc;font-size:11px;">${stripMd(change.fixed || '').substring(0, 150)}</td>
                     <td style="padding:6px;border:1px solid #ccc;font-size:11px;">${change.reason || ''}</td>
                 </tr>`;
             }).join('');

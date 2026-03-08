@@ -84,12 +84,23 @@ const AutoImprovementFixPanel: React.FC<AutoImprovementFixPanelProps> = ({
         if (!result || !originalDocx) return;
         setIsExporting(true);
         try {
+            // Strip markdown nhưng GIỮ LẠI <red> tags (tham khảo AIReductionPanel)
+            const stripMd = (str: string) => {
+                let s = str.replace(/\*\*(.*?)\*\*/g, '$1').replace(/(^|\n)\*\s/g, '$1- ').replace(/\*/g, '');
+                for (let i = 0; i < 5; i++) {
+                    const next = s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+                    if (next === s) break;
+                    s = next;
+                }
+                return s;
+            };
+
             const changes = (result.changes || []).map(c => ({
-                original: c.original,
-                fixed: c.fixed,
+                original: stripMd(c.original),
+                fixed: stripMd(c.fixed),
                 type: c.type as string,
             }));
-            const blob = await injectFixedContentToDocx(originalDocx, result.fixedContent, changes);
+            const blob = await injectFixedContentToDocx(originalDocx, stripMd(result.fixedContent), changes);
             const newFileName = originalDocx.fileName.replace('.docx', '_CAI_THIEN.docx');
             FileSaver.saveAs(blob, newFileName);
         } catch (err: any) {
