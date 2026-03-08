@@ -23,12 +23,17 @@ const AIReductionPanel: React.FC<AIReductionPanelProps> = ({
     const [error, setError] = useState<string | null>(null);
     const [isExporting, setIsExporting] = useState(false);
     const [expandedChanges, setExpandedChanges] = useState<Set<number>>(new Set());
+    const [progressStep, setProgressStep] = useState<string>('');
 
     const handleReduce = async () => {
         setIsProcessing(true);
         setError(null);
+        setProgressStep('Đang humanize nội dung...');
         try {
-            const res = await reduceAIContent(originalContent, aiRiskDetails, aiRiskScore, intensity);
+            const res = await reduceAIContent(
+                originalContent, aiRiskDetails, aiRiskScore, intensity,
+                (step) => setProgressStep(step)
+            );
 
             // Kiểm tra fixedContent có đủ dài
             const cleanFixed = res.fixedContent.replace(/<red>/g, '').replace(/<\/red>/g, '');
@@ -50,6 +55,7 @@ const AIReductionPanel: React.FC<AIReductionPanelProps> = ({
             setError(err.message || 'Đã xảy ra lỗi');
         } finally {
             setIsProcessing(false);
+            setProgressStep('');
         }
     };
 
@@ -275,7 +281,7 @@ const AIReductionPanel: React.FC<AIReductionPanelProps> = ({
                                     {isProcessing ? (
                                         <span className="flex items-center gap-2">
                                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                            Đang xử lý humanizing...
+                                            {progressStep || 'Đang xử lý humanizing...'}
                                         </span>
                                     ) : (
                                         <span className="flex items-center gap-2">
@@ -302,9 +308,28 @@ const AIReductionPanel: React.FC<AIReductionPanelProps> = ({
                         <>
                             {/* Before/After Comparison */}
                             <div className="bg-gradient-to-br from-emerald-50 to-cyan-50 dark:from-emerald-900/20 dark:to-cyan-900/20 rounded-2xl p-5 border border-emerald-200 dark:border-emerald-800">
-                                <h3 className="text-lg font-bold text-emerald-800 dark:text-emerald-300 mb-4 flex items-center gap-2">
-                                    <Shield size={18} /> So sánh Trước / Sau
-                                </h3>
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-lg font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+                                        <Shield size={18} /> So sánh Trước / Sau
+                                    </h3>
+                                    <div className="flex items-center gap-2">
+                                        {result.afterMetrics.verified && (
+                                            <span className="text-xs font-bold px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full border border-emerald-300 flex items-center gap-1">
+                                                ✅ Đã kiểm chứng
+                                            </span>
+                                        )}
+                                        {!result.afterMetrics.verified && (
+                                            <span className="text-xs font-bold px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full border border-amber-300 flex items-center gap-1">
+                                                ⚠️ Ước lượng
+                                            </span>
+                                        )}
+                                        {(result.retryCount ?? 0) > 0 && (
+                                            <span className="text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
+                                                Tối ưu {(result.retryCount ?? 0) + 1} lần
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     {[
                                         { label: 'AI Score', before: result.beforeMetrics.aiScore, after: result.afterMetrics.estimatedAIScore, unit: '%', good: 'low' as const },
@@ -392,6 +417,32 @@ const AIReductionPanel: React.FC<AIReductionPanelProps> = ({
                                     })}
                                 </div>
                             </div>
+
+                            {/* Verification Warning */}
+                            {result.verificationWarning && (
+                                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-xl p-4 flex items-start gap-3">
+                                    <AlertCircle className="text-amber-600 mt-0.5 shrink-0" size={18} />
+                                    <div>
+                                        <h4 className="text-sm font-bold text-amber-800 dark:text-amber-300">Lưu ý</h4>
+                                        <p className="text-xs text-amber-700/80 dark:text-amber-400 mt-1 leading-relaxed">
+                                            {result.verificationWarning}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Verified Disclaimer */}
+                            {result.afterMetrics.verified && (
+                                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200 flex items-start gap-3">
+                                    <Shield className="text-blue-600 mt-0.5 shrink-0" size={18} />
+                                    <div>
+                                        <h4 className="text-sm font-bold text-blue-800 dark:text-blue-300">AI Score đã kiểm chứng</h4>
+                                        <p className="text-xs text-blue-700/80 dark:text-blue-400 mt-1 leading-relaxed">
+                                            Điểm AI sau xử lý đã được <b>kiểm tra lại</b> bằng cùng hệ thống phân tích AI của ứng dụng. Kết quả hiển thị phía trên là điểm <b>đã kiểm chứng</b>, không phải ước lượng.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Export Buttons */}
                             <div className="flex flex-col sm:flex-row gap-3 pt-2">
