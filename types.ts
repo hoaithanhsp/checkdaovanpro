@@ -226,6 +226,19 @@ export interface AIReductionChange {
   reason: string;
 }
 
+// ========== AI VERIFICATION & CONFIDENCE ==========
+
+/**
+ * Kết quả quick AI detection (dùng cùng tiêu chí với analyzeSKKN)
+ */
+export interface QuickAIDetectionResult {
+  aiRiskScore: number;
+  perplexityScore: number;
+  burstinessScore: number;
+  patternDensity: number;
+  overallAIPercent: number;
+}
+
 export interface AIReductionResult {
   fixedContent: string;
   changes: AIReductionChange[];
@@ -247,5 +260,11 @@ export interface AIReductionResult {
     estimatedPerplexity: number;
     estimatedBurstiness: number;
     estimatedPatternDensity: number;
+    /** true nếu afterMetrics đã được verify bằng quickAIDetection */
+    verified: boolean;
   };
+  /** Số lần đã retry để đảm bảo score giảm */
+  retryCount?: number;
+  /** Cảnh báo nếu không giảm được score sau N lần retry */
+  verificationWarning?: string;
 }
