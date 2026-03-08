@@ -515,6 +515,81 @@ export interface AutoFixResult {
 }
 
 /**
+ * Bảo vệ năm học trong SKKN: khôi phục năm học gốc nếu AI tự ý thay đổi.
+ * Trích xuất tất cả pattern năm học từ bản gốc, so sánh với bản sửa,
+ * và thay thế lại nếu phát hiện sai lệch.
+ */
+const preserveSchoolYears = (originalContent: string, fixedContent: string): string => {
+  // Regex bắt pattern "năm học XXXX-XXXX" (có hoặc không có chữ "năm học")
+  const yearWithLabelRegex = /năm\s+học\s+(\d{4})\s*[-–]\s*(\d{4})/gi;
+  const yearOnlyRegex = /(\d{4})\s*[-–]\s*(\d{4})/g;
+
+  // Thu thập tất cả năm học từ bản gốc (dạng "năm học XXXX-XXXX" ưu tiên trước)
+  const originalYearsWithLabel: string[] = [];
+  let m;
+  while ((m = yearWithLabelRegex.exec(originalContent)) !== null) {
+    originalYearsWithLabel.push(m[0]);
+  }
+
+  // Nếu có pattern "năm học XXXX-XXXX" thì chỉ bảo vệ các pattern đó
+  if (originalYearsWithLabel.length > 0) {
+    let result = fixedContent;
+    const fixedYearsWithLabel: string[] = [];
+    const fixedYearWithLabelRegex = /năm\s+học\s+(\d{4})\s*[-–]\s*(\d{4})/gi;
+    while ((m = fixedYearWithLabelRegex.exec(fixedContent)) !== null) {
+      fixedYearsWithLabel.push(m[0]);
+    }
+
+    // Thay thế từng năm học bị thay đổi
+    for (let i = 0; i < fixedYearsWithLabel.length && i < originalYearsWithLabel.length; i++) {
+      // So sánh phần số (bỏ qua khoảng trắng/ký tự gạch ngang khác nhau)
+      const origNums = originalYearsWithLabel[i].match(/\d{4}/g);
+      const fixedNums = fixedYearsWithLabel[i].match(/\d{4}/g);
+      if (origNums && fixedNums && (origNums[0] !== fixedNums[0] || origNums[1] !== fixedNums[1])) {
+        result = result.replace(fixedYearsWithLabel[i], originalYearsWithLabel[i]);
+      }
+    }
+    return result;
+  }
+
+  // Fallback: bảo vệ pattern XXXX-XXXX ở các vị trí phổ biến (gần đầu văn bản)
+  const originalYearsOnly: string[] = [];
+  while ((m = yearOnlyRegex.exec(originalContent)) !== null) {
+    // Chỉ lấy các pattern năm hợp lệ (năm từ 2000-2099)
+    const y1 = parseInt(m[1]);
+    const y2 = parseInt(m[2]);
+    if (y1 >= 2000 && y1 <= 2099 && y2 >= 2000 && y2 <= 2099 && Math.abs(y2 - y1) === 1) {
+      originalYearsOnly.push(m[0]);
+    }
+  }
+
+  if (originalYearsOnly.length === 0) return fixedContent;
+
+  let result = fixedContent;
+  const fixedYearOnlyRegex = /(\d{4})\s*[-–]\s*(\d{4})/g;
+  const fixedYearsOnly: Array<{ full: string; y1: number; y2: number }> = [];
+  while ((m = fixedYearOnlyRegex.exec(fixedContent)) !== null) {
+    const y1 = parseInt(m[1]);
+    const y2 = parseInt(m[2]);
+    if (y1 >= 2000 && y1 <= 2099 && y2 >= 2000 && y2 <= 2099 && Math.abs(y2 - y1) === 1) {
+      fixedYearsOnly.push({ full: m[0], y1, y2 });
+    }
+  }
+
+  // So sánh: nếu năm học duy nhất trong gốc bị thay đổi trong bản sửa
+  const origNums = originalYearsOnly[0].match(/\d{4}/g);
+  if (origNums) {
+    for (const fy of fixedYearsOnly) {
+      if (fy.y1 !== parseInt(origNums[0]) || fy.y2 !== parseInt(origNums[1])) {
+        result = result.replace(fy.full, originalYearsOnly[0]);
+      }
+    }
+  }
+
+  return result;
+};
+
+/**
  * Tự động sửa SKKN dựa trên kết quả phân tích
  * Giữ nguyên định dạng gốc (bold, italic, công thức toán, bảng)
  */
@@ -637,7 +712,10 @@ Chỉ liệt kê tối đa 10 changes quan trọng nhất.${hasAIRisk ? ' Ưu ti
         });
 
         if (response.text) {
-          return JSON.parse(response.text) as AutoFixResult;
+          const parsed = JSON.parse(response.text) as AutoFixResult;
+          // Bảo vệ năm học: khôi phục nếu AI tự ý thay đổi
+          parsed.fixedContent = preserveSchoolYears(originalContent, parsed.fixedContent);
+          return parsed;
         } else {
           throw new Error("Empty response from Gemini");
         }
@@ -1031,7 +1109,10 @@ Sửa chữa SKKN theo các vấn đề trên. Với mỗi vấn đề:
         });
 
         if (response.text) {
-          return JSON.parse(response.text) as AutoImprovementFixResult;
+          const parsed = JSON.parse(response.text) as AutoImprovementFixResult;
+          // Bảo vệ năm học: khôi phục nếu AI tự ý thay đổi
+          parsed.fixedContent = preserveSchoolYears(originalContent, parsed.fixedContent);
+          return parsed;
         } else {
           throw new Error("Empty response from Gemini");
         }
@@ -1222,7 +1303,10 @@ Chỉ liệt kê tối đa 15 changes quan trọng nhất, đại diện cho 5 k
         });
 
         if (response.text) {
-          return JSON.parse(response.text) as AIReductionResult;
+          const parsed = JSON.parse(response.text) as AIReductionResult;
+          // Bảo vệ năm học: khôi phục nếu AI tự ý thay đổi
+          parsed.fixedContent = preserveSchoolYears(originalContent, parsed.fixedContent);
+          return parsed;
         } else {
           throw new Error("Empty response from Gemini");
         }
