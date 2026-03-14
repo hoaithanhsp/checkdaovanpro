@@ -18,7 +18,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, isLoading }) => {
     title: '',
     level: 'Tiểu học',
     subject: '',
-    target: 'Cấp Huyện',
+    target: 'Cấp Xã',
     content: ''
   });
   const [inputMode, setInputMode] = useState<InputMode>('file');
@@ -274,7 +274,7 @@ Qua áp dụng sáng kiến, chất lượng môn Lịch sử lớp 5A đã đư
               className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white"
             >
               <option value="Cấp Trường">Cấp Trường</option>
-              <option value="Cấp Huyện">Cấp Huyện</option>
+              <option value="Cấp Xã">Cấp Xã</option>
               <option value="Cấp Tỉnh">Cấp Tỉnh</option>
               <option value="Cấp Quốc gia">Cấp Quốc gia</option>
             </select>
