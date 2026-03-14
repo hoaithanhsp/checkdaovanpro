@@ -893,7 +893,7 @@ NỘI DUNG SKKN:
 ${truncatedContent}
 
 ## NHIỆM VỤ:
-Đánh giá SKKN theo 9 tiêu chí dưới đây (mỗi tiêu chí tối đa 10 điểm, tổng 90 điểm, quy đổi sang thang 100):
+Đánh giá SKKN theo 9 tiêu chí dưới đây (mỗi tiêu chí tối đa 10 điểm, tổng 90 điểm):
 
 1. C01 - Cấu trúc: Tính đầy đủ, logic và mạch lạc
 2. C02 - Cơ sở lý luận: Lý thuyết giáo dục, trích dẫn nghiên cứu
@@ -909,8 +909,8 @@ Sau khi đánh giá, phát hiện các vấn đề cần cải thiện và đề
 
 ## OUTPUT JSON:
 {
-  "totalScore": <tổng điểm quy đổi thang 100>,
-  "maxScore": 100,
+  "totalScore": <tổng điểm trên thang 90>,
+  "maxScore": 90,
   "rating": "<Xuất sắc|Tốt|Khá|Trung bình|Yếu>",
   "colorCode": "<mã màu hex>",
   "criteria": [
