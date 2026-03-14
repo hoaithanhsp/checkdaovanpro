@@ -17,6 +17,7 @@ export interface VIPAccount {
 export const VIP_ACCOUNTS: VIPAccount[] = [
     { username: "admin", password: "admin123", displayName: "Quản trị viên" },
     { username: "trannguyenyennhi19@gmail.com", password: "SKKN100", name: "GV" },
+    { username: "phuong87gdktpl@gmail.com", password: "SKKN100", name: "GV" },
     { username: "caibaptron15391@gmail.com", password: "SKKN100", name: "GV" },
     { username: "caoxuanque2025@gmail.com", password: "SKKN100", name: "GV" },
     { username: "anhtuyet195@gmail.com", password: "SKKN100", name: "GV" },
