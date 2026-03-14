@@ -228,77 +228,85 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
       )}
 
       {/* Header Summary */}
-      <div className="bg-white rounded-2xl shadow-lg p-8 border-l-8 border-blue-600 flex flex-col md:flex-row justify-between items-center gap-6">
-        <div>
-          <h2 className="text-3xl font-bold text-gray-800 mb-2">Kết quả Thẩm định SKKN</h2>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
+      <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8 border-l-8 border-blue-600">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
+          <div>
+            <h2 className="text-3xl font-bold text-gray-800 mb-1">Kết quả Thẩm định SKKN</h2>
+          </div>
+          <div className="text-center md:text-right">
             <p className="text-sm text-gray-500 uppercase font-semibold">Tổng điểm dự kiến</p>
             <p className="text-5xl font-black text-blue-600">{scores.total}<span className="text-2xl text-gray-400">/100</span></p>
           </div>
-          <div className="h-16 w-px bg-gray-200"></div>
-          {/* Checklist Button */}
+        </div>
+
+        {/* Action Buttons Grid — 2 hàng, icon + text */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          {/* Checklist */}
           <button
             onClick={() => { if (!handleTrialBlock()) setShowChecklist(true); }}
-            className={`p-3 rounded-full text-white transition-colors ${
+            className={`flex items-center gap-2 px-4 py-3 rounded-xl text-white text-sm font-semibold transition-all ${
               isTrial
                 ? 'bg-gray-400 opacity-60 cursor-not-allowed'
-                : 'bg-emerald-600 hover:bg-emerald-700'
+                : 'bg-emerald-600 hover:bg-emerald-700 hover:shadow-md'
             }`}
-            title={isTrial ? 'Kích hoạt VIP để sử dụng' : 'Checklist cải thiện'}
           >
-            <CheckSquare size={24} />
+            <CheckSquare size={18} />
+            <span>{isTrial ? '🔒 ' : ''}Checklist</span>
           </button>
-          {/* References Button */}
+
+          {/* Tài liệu tham khảo */}
           <button
             onClick={() => { if (!handleTrialBlock()) setShowReferences(true); }}
-            className={`p-3 rounded-full text-white transition-colors ${
+            className={`flex items-center gap-2 px-4 py-3 rounded-xl text-white text-sm font-semibold transition-all ${
               isTrial
                 ? 'bg-gray-400 opacity-60 cursor-not-allowed'
-                : 'bg-indigo-600 hover:bg-indigo-700'
+                : 'bg-indigo-600 hover:bg-indigo-700 hover:shadow-md'
             }`}
-            title={isTrial ? 'Kích hoạt VIP để sử dụng' : 'Gợi ý tài liệu tham khảo'}
           >
-            <BookMarked size={24} />
+            <BookMarked size={18} />
+            <span>{isTrial ? '🔒 ' : ''}Tài liệu TK</span>
           </button>
-          {/* Share Button */}
+
+          {/* Chia sẻ */}
           <button
             onClick={() => { if (!handleTrialBlock()) setShowShare(true); }}
-            className={`p-3 rounded-full text-white transition-colors ${
+            className={`flex items-center gap-2 px-4 py-3 rounded-xl text-white text-sm font-semibold transition-all ${
               isTrial
                 ? 'bg-gray-400 opacity-60 cursor-not-allowed'
-                : 'bg-pink-600 hover:bg-pink-700'
+                : 'bg-pink-600 hover:bg-pink-700 hover:shadow-md'
             }`}
-            title={isTrial ? 'Kích hoạt VIP để sử dụng' : 'Chia sẻ kết quả'}
           >
-            <Share2 size={24} />
+            <Share2 size={18} />
+            <span>{isTrial ? '🔒 ' : ''}Chia sẻ</span>
           </button>
-          {/* Auto Fix Button */}
+
+          {/* Tự động sửa SKKN */}
           <button
             onClick={() => { if (!handleTrialBlock()) setShowAutoFix(true); }}
-            className={`p-3 rounded-full text-white transition-all shadow-lg ${
+            className={`flex items-center gap-2 px-4 py-3 rounded-xl text-white text-sm font-semibold transition-all ${
               isTrial
                 ? 'bg-gray-400 opacity-60 cursor-not-allowed'
-                : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 hover:shadow-xl'
+                : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 hover:shadow-md'
             }`}
-            title={isTrial ? 'Kích hoạt VIP để sử dụng' : 'Tự động sửa SKKN'}
           >
-            <Wand2 size={24} />
+            <Wand2 size={18} />
+            <span>{isTrial ? '🔒 ' : ''}Tự động sửa</span>
           </button>
-          {/* Improvement Panel Button */}
+
+          {/* Đề xuất cải thiện */}
           <button
             onClick={() => { if (!handleTrialBlock()) setShowImprovement(true); }}
-            className={`p-3 rounded-full text-white transition-all shadow-lg ${
+            className={`flex items-center gap-2 px-4 py-3 rounded-xl text-white text-sm font-semibold transition-all ${
               isTrial
                 ? 'bg-gray-400 opacity-60 cursor-not-allowed'
-                : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 hover:shadow-xl'
+                : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 hover:shadow-md'
             }`}
-            title={isTrial ? 'Kích hoạt VIP để sử dụng' : 'Đề xuất cải thiện SKKN'}
           >
-            <BarChart3 size={24} />
+            <BarChart3 size={18} />
+            <span>{isTrial ? '🔒 ' : ''}Đề xuất cải thiện</span>
           </button>
-          {/* Auto Improvement Fix Button */}
+
+          {/* Sửa từ đề xuất */}
           <button
             onClick={() => {
               if (handleTrialBlock()) return;
@@ -308,44 +316,47 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
                 setShowImprovement(true);
               }
             }}
-            className={`p-3 rounded-full text-white transition-all shadow-lg ${
+            className={`flex items-center gap-2 px-4 py-3 rounded-xl text-white text-sm font-semibold transition-all ${
               isTrial
                 ? 'bg-gray-400 opacity-60 cursor-not-allowed'
-                : 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 hover:shadow-xl'
+                : 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 hover:shadow-md'
             }`}
-            title={isTrial ? 'Kích hoạt VIP để sử dụng' : 'Sửa chữa SKKN từ đề xuất'}
           >
-            <Wrench size={24} />
+            <Wrench size={18} />
+            <span>{isTrial ? '🔒 ' : ''}Sửa từ đề xuất</span>
           </button>
-          {/* AI Reduction Button (chỉ hiện khi có rủi ro AI) */}
+
+          {/* Giảm AI (chỉ hiện khi rủi ro AI > 20) */}
           {((result.aiRiskScore || 0) > 20) && (
             <button
               onClick={() => { if (!handleTrialBlock()) setShowAIReduction(true); }}
-              className={`p-3 rounded-full text-white transition-all shadow-lg ${
+              className={`flex items-center gap-2 px-4 py-3 rounded-xl text-white text-sm font-semibold transition-all ${
                 isTrial
                   ? 'bg-gray-400 opacity-60 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 hover:shadow-xl'
+                  : 'bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 hover:shadow-md'
               }`}
-              title={isTrial ? 'Kích hoạt VIP để sử dụng' : `Giảm độ AI (${result.aiRiskScore}%)`}
             >
-              <Bot size={24} />
+              <Bot size={18} />
+              <span>{isTrial ? '🔒 ' : ''}Giảm AI ({result.aiRiskScore}%)</span>
             </button>
           )}
+
+          {/* Xuất báo cáo */}
           <div className="relative">
             <button
               onClick={() => { if (!handleTrialBlock()) setShowExportMenu(!showExportMenu); }}
               disabled={isExporting}
-              className={`p-3 rounded-full text-white transition-colors disabled:bg-gray-400 ${
+              className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl text-white text-sm font-semibold transition-all disabled:bg-gray-400 ${
                 isTrial
                   ? 'bg-gray-400 opacity-60 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700'
+                  : 'bg-blue-600 hover:bg-blue-700 hover:shadow-md'
               }`}
-              title={isTrial ? 'Kích hoạt VIP để sử dụng' : 'Xuất báo cáo'}
             >
-              {isExporting ? <Loader2 size={24} className="animate-spin" /> : <FileDown size={24} />}
+              {isExporting ? <Loader2 size={18} className="animate-spin" /> : <FileDown size={18} />}
+              <span>{isTrial ? '🔒 ' : ''}Xuất báo cáo</span>
             </button>
             {showExportMenu && (
-              <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-2 min-w-[180px] z-10">
+              <div className="absolute left-0 top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-2 min-w-[200px] z-10">
                 <button
                   onClick={handleExportWord}
                   className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
