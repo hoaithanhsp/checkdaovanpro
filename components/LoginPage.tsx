@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ShieldCheck, User, Lock, Eye, EyeOff, Sparkles } from 'lucide-react';
-import { authenticateUser, saveLoginState, VIPAccount } from '../data/accounts';
+import { ShieldCheck, User, Lock, Eye, EyeOff, Sparkles, PlayCircle } from 'lucide-react';
+import { authenticateUser, saveLoginState, VIPAccount, hasUsedTrial, markTrialUsed, TRIAL_ACCOUNT } from '../data/accounts';
 
 interface LoginPageProps {
     onLoginSuccess: (user: VIPAccount) => void;
@@ -12,6 +12,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [showTrialUsedModal, setShowTrialUsedModal] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -24,12 +25,38 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         const account = authenticateUser(username, password);
 
         if (account) {
+            if (account.isTrial) {
+                if (hasUsedTrial()) {
+                    setShowTrialUsedModal(true);
+                    setIsLoading(false);
+                    return;
+                }
+                markTrialUsed();
+            }
             saveLoginState(account);
             onLoginSuccess(account);
         } else {
             setError('Tên đăng nhập hoặc mật khẩu không đúng!');
         }
 
+        setIsLoading(false);
+    };
+
+    const handleTryFree = async () => {
+        setError('');
+        setIsLoading(true);
+
+        await new Promise(resolve => setTimeout(resolve, 600));
+
+        if (hasUsedTrial()) {
+            setShowTrialUsedModal(true);
+            setIsLoading(false);
+            return;
+        }
+
+        markTrialUsed();
+        saveLoginState(TRIAL_ACCOUNT);
+        onLoginSuccess(TRIAL_ACCOUNT);
         setIsLoading(false);
     };
 
@@ -55,6 +82,53 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     />
                 ))}
             </div>
+
+            {/* Trial Used Modal */}
+            {showTrialUsedModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+                        <div className="bg-gradient-to-r from-orange-500 to-red-500 p-6 text-center">
+                            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <span className="text-3xl">⏰</span>
+                            </div>
+                            <h3 className="text-xl font-black text-white">Hết Lượt Dùng Thử</h3>
+                        </div>
+                        <div className="p-6 text-center">
+                            <p className="text-gray-700 text-base leading-relaxed mb-6">
+                                Thầy cô hết lượt dùng thử, liên hệ{' '}
+                                <span className="font-bold text-blue-600">zalo 0348296773</span>
+                                {' '}hoặc{' '}
+                                <span className="font-bold text-blue-600">facebook Trần Hoài Thanh</span>
+                                {' '}để đăng ký sử dụng full tính năng và không giới hạn.
+                            </p>
+                            <div className="flex flex-col gap-3">
+                                <a
+                                    href="https://zalo.me/0348296773"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+                                >
+                                    💬 Liên hệ Zalo 0348296773
+                                </a>
+                                <a
+                                    href="https://www.facebook.com/tranhoaithanhvicko/"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="w-full py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+                                >
+                                    👤 Facebook Trần Hoài Thanh
+                                </a>
+                                <button
+                                    onClick={() => setShowTrialUsedModal(false)}
+                                    className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-colors"
+                                >
+                                    Đóng
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Login Card */}
             <div className="relative z-10 w-full max-w-md">
@@ -143,6 +217,27 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                                 </>
                             )}
                         </button>
+
+                        {/* Divider */}
+                        <div className="flex items-center gap-3">
+                            <div className="flex-1 h-px bg-white/20"></div>
+                            <span className="text-white/50 text-sm">hoặc</span>
+                            <div className="flex-1 h-px bg-white/20"></div>
+                        </div>
+
+                        {/* Trial Button */}
+                        <button
+                            type="button"
+                            onClick={handleTryFree}
+                            disabled={isLoading}
+                            className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold rounded-xl transform hover:scale-[1.02] transition-all shadow-lg shadow-emerald-500/30 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 border-2 border-emerald-400/50"
+                        >
+                            <PlayCircle size={22} />
+                            🎯 DÙNG THỬ MIỄN PHÍ
+                        </button>
+                        <p className="text-white/40 text-xs text-center -mt-3">
+                            * Mỗi trình duyệt chỉ được dùng thử 1 lần. Tính năng nâng cao bị giới hạn.
+                        </p>
                     </form>
 
                     {/* Footer */}

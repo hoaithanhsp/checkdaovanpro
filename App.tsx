@@ -8,7 +8,7 @@ import LoginPage from './components/LoginPage';
 import { SKKNInput, AnalysisResult, AnalysisStatus } from './types';
 import { analyzeSKKNWithGemini } from './services/geminiService';
 import { saveToHistory, HistoryItem } from './services/historyService';
-import { getLoggedInUser, logout, VIPAccount } from './data/accounts';
+import { getLoggedInUser, logout, VIPAccount, isTrialAccount } from './data/accounts';
 import { useTheme } from './contexts/ThemeContext';
 import { ShieldCheck, BookOpen, History, Sun, Moon, GitCompare, LogOut } from 'lucide-react';
 import { hasAnyKey } from './services/apiKeyService';
@@ -25,6 +25,8 @@ const App: React.FC = () => {
   const [hasApiKey, setHasApiKey] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState<{ username: string; displayName: string } | null>(null);
+  const [isTrial, setIsTrial] = useState(false);
+  const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(false);
   const [progress, setProgress] = useState(0);
   const currentInputRef = useRef<SKKNInput | null>(null);
 
@@ -35,6 +37,7 @@ const App: React.FC = () => {
     if (user) {
       setIsLoggedIn(true);
       setLoggedInUser(user);
+      setIsTrial(isTrialAccount(user.username));
     }
 
     // Kiểm tra có API key nào không (hỗ trợ nhiều key)
@@ -47,6 +50,7 @@ const App: React.FC = () => {
 
   const handleLoginSuccess = (account: VIPAccount) => {
     setIsLoggedIn(true);
+    setIsTrial(!!account.isTrial);
     setLoggedInUser({
       username: account.username,
       displayName: account.displayName || account.username
@@ -57,6 +61,7 @@ const App: React.FC = () => {
     logout();
     setIsLoggedIn(false);
     setLoggedInUser(null);
+    setIsTrial(false);
   };
 
   const handleApiKeySave = (_apiKey: string, _model: string) => {
@@ -432,8 +437,45 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {/* Trial Expired Modal */}
+        {showTrialExpiredModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+              <div className="bg-gradient-to-r from-orange-500 to-red-500 p-6 text-center">
+                <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <span className="text-3xl">⏰</span>
+                </div>
+                <h3 className="text-xl font-black text-white">Hết Lượt Dùng Thử</h3>
+              </div>
+              <div className="p-6 text-center">
+                <p className="text-gray-700 text-base leading-relaxed mb-6">
+                  Thầy cô hết lượt dùng thử, liên hệ{' '}
+                  <span className="font-bold text-blue-600">zalo 0348296773</span>
+                  {' '}hoặc{' '}
+                  <span className="font-bold text-blue-600">facebook Trần Hoài Thanh</span>
+                  {' '}để đăng ký sử dụng full tính năng và không giới hạn.
+                </p>
+                <div className="flex flex-col gap-3">
+                  <a href="https://zalo.me/0348296773" target="_blank" rel="noreferrer"
+                    className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2">
+                    💬 Liên hệ Zalo 0348296773
+                  </a>
+                  <a href="https://www.facebook.com/tranhoaithanhvicko/" target="_blank" rel="noreferrer"
+                    className="w-full py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2">
+                    👤 Facebook Trần Hoài Thanh
+                  </a>
+                  <button onClick={() => setShowTrialExpiredModal(false)}
+                    className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-colors">
+                    Đóng
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {status === AnalysisStatus.SUCCESS && result && (
-          <ResultsDashboard result={result} input={currentInputRef.current || undefined} onReset={handleReset} />
+          <ResultsDashboard result={result} input={currentInputRef.current || undefined} onReset={handleReset} isTrial={isTrial} />
         )}
       </main>
 

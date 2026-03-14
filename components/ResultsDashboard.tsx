@@ -23,9 +23,10 @@ interface ResultsDashboardProps {
   result: AnalysisResult;
   input?: SKKNInput;
   onReset: () => void;
+  isTrial?: boolean;
 }
 
-const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onReset }) => {
+const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onReset, isTrial = false }) => {
   const [isExporting, setIsExporting] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [selectedSegment, setSelectedSegment] = useState<PlagiarismSegment | null>(null);
@@ -37,6 +38,15 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
   const [showAutoImprovement, setShowAutoImprovement] = useState(false);
   const [showAIReduction, setShowAIReduction] = useState(false);
   const [improvementResult, setImprovementResult] = useState<ImprovementAnalysisResult | null>(null);
+  const [showVIPModal, setShowVIPModal] = useState(false);
+
+  const handleTrialBlock = () => {
+    if (isTrial) {
+      setShowVIPModal(true);
+      return true;
+    }
+    return false;
+  };
 
   // Safe defaults cho các trường mảng có thể undefined từ API
   const spellingErrors = result.spellingErrors || [];
@@ -79,6 +89,57 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-fade-in pb-20">
+
+      {/* VIP Upgrade Modal for Trial Users */}
+      {showVIPModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setShowVIPModal(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-6 text-center">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span className="text-3xl">⭐</span>
+              </div>
+              <h3 className="text-xl font-black text-white">Nâng cấp VIP</h3>
+            </div>
+            <div className="p-6 text-center">
+              <p className="text-gray-700 text-base leading-relaxed mb-2 font-semibold text-purple-700 text-lg">
+                ✨ Kích hoạt tài khoản VIP 199k
+              </p>
+              <p className="text-gray-600 mb-6">
+                để được sử dụng <strong>full tính năng</strong> và <strong>không giới hạn lượt</strong> và ngày sử dụng
+              </p>
+              <div className="flex flex-col gap-3">
+                <a href="https://zalo.me/0348296773" target="_blank" rel="noreferrer"
+                  className="w-full py-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg">
+                  💬 Liên hệ Zalo 0348296773
+                </a>
+                <a href="https://www.facebook.com/tranhoaithanhvicko/" target="_blank" rel="noreferrer"
+                  className="w-full py-3 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg">
+                  👤 Facebook Trần Hoài Thanh
+                </a>
+                <button onClick={() => setShowVIPModal(false)}
+                  className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-colors">
+                  Đây rồi, cảm ơn!
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Trial Banner */}
+      {isTrial && (
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl p-4 flex items-center gap-4">
+          <div className="text-3xl flex-shrink-0">🌟</div>
+          <div className="flex-1">
+            <p className="font-bold text-amber-800">Chế độ Dùng Thử</p>
+            <p className="text-amber-700 text-sm">Kích hoạt tài khoản <strong>VIP 199k</strong> để mở khóa Viết lại AI, Xuất báo cáo, Đề xuất cải thiện và nhiều hơn. Liên hệ Zalo <strong>0348296773</strong>.</p>
+          </div>
+          <button onClick={() => setShowVIPModal(true)}
+            className="flex-shrink-0 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors text-sm whitespace-nowrap">
+            Nâng cấp VIP
+          </button>
+        </div>
+      )}
       {/* Rewrite Panel Modal */}
       {selectedSegment && (
         <RewritePanel
@@ -179,74 +240,107 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
           <div className="h-16 w-px bg-gray-200"></div>
           {/* Checklist Button */}
           <button
-            onClick={() => setShowChecklist(true)}
-            className="p-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
-            title="Checklist cải thiện"
+            onClick={() => { if (!handleTrialBlock()) setShowChecklist(true); }}
+            className={`p-3 rounded-full text-white transition-colors ${
+              isTrial
+                ? 'bg-gray-400 opacity-60 cursor-not-allowed'
+                : 'bg-emerald-600 hover:bg-emerald-700'
+            }`}
+            title={isTrial ? 'Kích hoạt VIP để sử dụng' : 'Checklist cải thiện'}
           >
             <CheckSquare size={24} />
           </button>
           {/* References Button */}
           <button
-            onClick={() => setShowReferences(true)}
-            className="p-3 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
-            title="Gợi ý tài liệu tham khảo"
+            onClick={() => { if (!handleTrialBlock()) setShowReferences(true); }}
+            className={`p-3 rounded-full text-white transition-colors ${
+              isTrial
+                ? 'bg-gray-400 opacity-60 cursor-not-allowed'
+                : 'bg-indigo-600 hover:bg-indigo-700'
+            }`}
+            title={isTrial ? 'Kích hoạt VIP để sử dụng' : 'Gợi ý tài liệu tham khảo'}
           >
             <BookMarked size={24} />
           </button>
           {/* Share Button */}
           <button
-            onClick={() => setShowShare(true)}
-            className="p-3 rounded-full bg-pink-600 hover:bg-pink-700 text-white transition-colors"
-            title="Chia sẻ kết quả"
+            onClick={() => { if (!handleTrialBlock()) setShowShare(true); }}
+            className={`p-3 rounded-full text-white transition-colors ${
+              isTrial
+                ? 'bg-gray-400 opacity-60 cursor-not-allowed'
+                : 'bg-pink-600 hover:bg-pink-700'
+            }`}
+            title={isTrial ? 'Kích hoạt VIP để sử dụng' : 'Chia sẻ kết quả'}
           >
             <Share2 size={24} />
           </button>
           {/* Auto Fix Button */}
           <button
-            onClick={() => setShowAutoFix(true)}
-            className="p-3 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white transition-all shadow-lg hover:shadow-xl"
-            title="Tự động sửa SKKN"
+            onClick={() => { if (!handleTrialBlock()) setShowAutoFix(true); }}
+            className={`p-3 rounded-full text-white transition-all shadow-lg ${
+              isTrial
+                ? 'bg-gray-400 opacity-60 cursor-not-allowed'
+                : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 hover:shadow-xl'
+            }`}
+            title={isTrial ? 'Kích hoạt VIP để sử dụng' : 'Tự động sửa SKKN'}
           >
             <Wand2 size={24} />
           </button>
           {/* Improvement Panel Button */}
           <button
-            onClick={() => setShowImprovement(true)}
-            className="p-3 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white transition-all shadow-lg hover:shadow-xl"
-            title="Đề xuất cải thiện SKKN"
+            onClick={() => { if (!handleTrialBlock()) setShowImprovement(true); }}
+            className={`p-3 rounded-full text-white transition-all shadow-lg ${
+              isTrial
+                ? 'bg-gray-400 opacity-60 cursor-not-allowed'
+                : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 hover:shadow-xl'
+            }`}
+            title={isTrial ? 'Kích hoạt VIP để sử dụng' : 'Đề xuất cải thiện SKKN'}
           >
             <BarChart3 size={24} />
           </button>
           {/* Auto Improvement Fix Button */}
           <button
             onClick={() => {
+              if (handleTrialBlock()) return;
               if (improvementResult) {
                 setShowAutoImprovement(true);
               } else {
                 setShowImprovement(true);
               }
             }}
-            className="p-3 rounded-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white transition-all shadow-lg hover:shadow-xl"
-            title="Sửa chữa SKKN từ đề xuất"
+            className={`p-3 rounded-full text-white transition-all shadow-lg ${
+              isTrial
+                ? 'bg-gray-400 opacity-60 cursor-not-allowed'
+                : 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 hover:shadow-xl'
+            }`}
+            title={isTrial ? 'Kích hoạt VIP để sử dụng' : 'Sửa chữa SKKN từ đề xuất'}
           >
             <Wrench size={24} />
           </button>
           {/* AI Reduction Button (chỉ hiện khi có rủi ro AI) */}
           {((result.aiRiskScore || 0) > 20) && (
             <button
-              onClick={() => setShowAIReduction(true)}
-              className="p-3 rounded-full bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white transition-all shadow-lg hover:shadow-xl"
-              title={`Giảm độ AI (${result.aiRiskScore}%)`}
+              onClick={() => { if (!handleTrialBlock()) setShowAIReduction(true); }}
+              className={`p-3 rounded-full text-white transition-all shadow-lg ${
+                isTrial
+                  ? 'bg-gray-400 opacity-60 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 hover:shadow-xl'
+              }`}
+              title={isTrial ? 'Kích hoạt VIP để sử dụng' : `Giảm độ AI (${result.aiRiskScore}%)`}
             >
               <Bot size={24} />
             </button>
           )}
           <div className="relative">
             <button
-              onClick={() => setShowExportMenu(!showExportMenu)}
+              onClick={() => { if (!handleTrialBlock()) setShowExportMenu(!showExportMenu); }}
               disabled={isExporting}
-              className="p-3 rounded-full bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:bg-gray-400"
-              title="Xuất báo cáo"
+              className={`p-3 rounded-full text-white transition-colors disabled:bg-gray-400 ${
+                isTrial
+                  ? 'bg-gray-400 opacity-60 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
+              title={isTrial ? 'Kích hoạt VIP để sử dụng' : 'Xuất báo cáo'}
             >
               {isExporting ? <Loader2 size={24} className="animate-spin" /> : <FileDown size={24} />}
             </button>
@@ -345,10 +439,15 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
                         </span>
                       </div>
                       <button
-                        onClick={() => setSelectedSegment(seg)}
-                        className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors flex items-center gap-1"
+                        onClick={() => { if (!handleTrialBlock()) setSelectedSegment(seg); }}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
+                          isTrial
+                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-70'
+                            : 'bg-purple-600 text-white hover:bg-purple-700'
+                        }`}
+                        title={isTrial ? 'Kích hoạt VIP để sử dụng' : 'Viết lại bằng AI'}
                       >
-                        <PenLine size={14} /> Viết lại bằng AI
+                        <PenLine size={14} /> {isTrial ? '🔒 Viết lại bằng AI' : 'Viết lại bằng AI'}
                       </button>
                     </div>
                     <p className="text-xs text-gray-600 mt-2">💡 {seg.advice}</p>

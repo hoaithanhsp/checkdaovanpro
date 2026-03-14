@@ -9,12 +9,22 @@ export interface VIPAccount {
     username: string;
     password: string;
     displayName?: string;
+    isTrial?: boolean;
 }
 
 // ============ DANH SÁCH TÀI KHOẢN VIP ============
 // Thêm mỗi tài khoản 1 dòng theo format: { username: "...", password: "...", displayName: "..." },
 
+// ============ TÀI KHOẢN DÙNG THỬ ============
+export const TRIAL_ACCOUNT: VIPAccount = {
+    username: "TRANHOAITHANH",
+    password: "SKKN123",
+    displayName: "Dùng Thử",
+    isTrial: true
+};
+
 export const VIP_ACCOUNTS: VIPAccount[] = [
+    TRIAL_ACCOUNT,
     { username: "admin", password: "admin123", displayName: "Quản trị viên" },
     { username: "trannguyenyennhi19@gmail.com", password: "SKKN100", name: "GV" },
     { username: "phuong87gdktpl@gmail.com", password: "SKKN100", name: "GV" },
@@ -222,6 +232,20 @@ export const getLoggedInUser = (): { username: string; displayName: string } | n
 
 export const logout = () => {
     localStorage.removeItem('vip_user');
+};
+
+// ============ HÀM DÙNG THỬ ============
+
+export const isTrialAccount = (username: string): boolean => {
+    return username === TRIAL_ACCOUNT.username;
+};
+
+export const hasUsedTrial = (): boolean => {
+    return localStorage.getItem('trial_used') === 'true';
+};
+
+export const markTrialUsed = (): void => {
+    localStorage.setItem('trial_used', 'true');
 };
 
 
