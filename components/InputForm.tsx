@@ -1,9 +1,10 @@
 import React, { useState, ChangeEvent } from 'react';
 import { SKKNInput, OriginalDocxFile, TitleAnalysisResult } from '../types';
-import { BookOpen, Target, GraduationCap, FileText, Sparkles, Upload, Type, AlertCircle, Search, Loader2 } from 'lucide-react';
+import { BookOpen, Target, GraduationCap, FileText, Sparkles, Upload, Type, AlertCircle, Search, Loader2, ExternalLink, X } from 'lucide-react';
 import FileUpload from './FileUpload';
 import TitleAnalysisPanel from './TitleAnalysisPanel';
 import { analyzeTitleSKKN } from '../services/geminiService';
+import { hasAnyKey } from '../services/apiKeyService';
 
 interface InputFormProps {
   onSubmit: (data: SKKNInput) => void;
@@ -24,6 +25,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, isLoading }) => {
   const [fileError, setFileError] = useState<string | null>(null);
   const [isAnalyzingTitle, setIsAnalyzingTitle] = useState(false);
   const [titleAnalysis, setTitleAnalysis] = useState<TitleAnalysisResult | null>(null);
+  const [showApiKeyGuide, setShowApiKeyGuide] = useState(false);
 
   const handleAnalyzeTitle = async () => {
     if (!formData.title.trim()) {
@@ -68,6 +70,11 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, isLoading }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Kiểm tra API key trước
+    if (!hasAnyKey()) {
+      setShowApiKeyGuide(true);
+      return;
+    }
     if (formData.content.length < 50) {
       alert("Vui lòng nhập nội dung dài hơn để hệ thống có thể phân tích chính xác.");
       return;
@@ -101,6 +108,82 @@ Qua áp dụng sáng kiến, chất lượng môn Lịch sử lớp 5A đã đư
   };
 
   return (
+    <>
+    {/* API Key Guide Modal */}
+    {showApiKeyGuide && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowApiKeyGuide(false)}>
+        <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+          {/* Header */}
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-center relative">
+            <button onClick={() => setShowApiKeyGuide(false)} className="absolute right-4 top-4 p-1 hover:bg-white/20 rounded-lg transition-colors text-white">
+              <X size={20} />
+            </button>
+            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
+              <span className="text-3xl">🔑</span>
+            </div>
+            <h3 className="text-xl font-black text-white">Cần API Key để sử dụng</h3>
+          </div>
+
+          {/* Content */}
+          <div className="p-6 space-y-5">
+            <p className="text-gray-700 text-center font-medium">
+              Tất cả các app đều cần lấy <strong className="text-blue-600">API Key</strong> để dùng nhé thầy cô!
+            </p>
+
+            {/* Link lấy API Key */}
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-blue-800 mb-2">📎 Link lấy API Key:</p>
+              <a
+                href="https://aistudio.google.com/app/api-keys"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium text-sm break-all"
+              >
+                <ExternalLink size={16} className="flex-shrink-0" />
+                https://aistudio.google.com/app/api-keys
+              </a>
+            </div>
+
+            {/* Video hướng dẫn */}
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-purple-800 mb-2">🎬 Video hướng dẫn lấy API Key:</p>
+              <a
+                href="https://youtu.be/Wu-yRkugiFw"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 text-purple-600 hover:text-purple-700 font-medium text-sm"
+              >
+                <ExternalLink size={16} className="flex-shrink-0" />
+                https://youtu.be/Wu-yRkugiFw
+              </a>
+            </div>
+
+            {/* Liên hệ hỗ trợ */}
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-emerald-800 mb-2">💬 Liên hệ hỗ trợ:</p>
+              <a
+                href="https://zalo.me/0348296773"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 text-emerald-600 hover:text-emerald-700 font-medium text-sm"
+              >
+                <ExternalLink size={16} className="flex-shrink-0" />
+                Zalo 0348296773
+              </a>
+            </div>
+
+            {/* Nút đóng */}
+            <button
+              onClick={() => setShowApiKeyGuide(false)}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors"
+            >
+              Đã hiểu, tôi sẽ lấy API Key
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     <div className="w-full max-w-4xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden animate-fade-in-up">
       <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-6 text-white text-center">
         <h2 className="text-2xl font-bold mb-2">Nhập thông tin SKKN</h2>
@@ -311,6 +394,7 @@ Qua áp dụng sáng kiến, chất lượng môn Lịch sử lớp 5A đã đư
         />
       )}
     </div>
+    </>
   );
 };
 
