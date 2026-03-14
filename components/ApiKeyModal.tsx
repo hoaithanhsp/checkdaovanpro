@@ -23,14 +23,14 @@ interface ApiKeyModalProps {
 }
 
 const FREE_MODELS = [
-    { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', description: 'Nhanh và hiệu quả', default: true },
-    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Mới, mạnh mẽ hơn' },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Mới, mạnh mẽ hơn', default: true },
+    { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', description: 'Nhanh và hiệu quả' },
     { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', description: 'Ổn định và đáng tin cậy' },
 ];
 
 const PAID_MODELS = [
-    { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', description: 'Nhanh và hiệu quả', default: true },
-    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Mới, mạnh mẽ hơn' },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Mới, mạnh mẽ hơn', default: true },
+    { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', description: 'Nhanh và hiệu quả' },
     { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', description: 'Ổn định và đáng tin cậy' },
     { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: 'Mạnh mẽ, chi tiết, chính xác cao', paid: true },
 ];
@@ -50,7 +50,7 @@ export const saveApiKeyAndModel = (apiKey: string, model: string): void => {
 
 const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRequired = false }) => {
     const [apiKeyInput, setApiKeyInput] = useState('');
-    const [selectedModel, setSelectedModel] = useState(FREE_MODELS[0].id);
+    const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
     const [error, setError] = useState('');
     const [showKey, setShowKey] = useState(false);
     const [inputMode, setInputMode] = useState<'env' | 'manual'>('env');
