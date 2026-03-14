@@ -358,6 +358,16 @@ const App: React.FC = () => {
                   Trần Hoài Thanh
                 </span>
               </p>
+
+              {/* Browser recommendation */}
+              <p className="text-xs md:text-sm font-semibold text-orange-600 dark:text-orange-400 mt-3">
+                KHUYẾN NGHỊ SỬ DỤNG TRÌNH DUYỆT MICROSOFT EDGE ĐỂ TRÁNH CÁC THÔNG BÁO SAI VỀ BẢO MẬT
+              </p>
+
+              {/* Security notice */}
+              <p className="text-xs md:text-sm font-medium text-emerald-700 dark:text-emerald-400 mt-1 leading-relaxed max-w-2xl">
+                APP ĐẢM BẢO BẢO MẬT NỘI DUNG SKKN CỦA THẦY CÔ, CHỈ LƯU CỤC BỘ TRÊN MÁY THẦY CÔ, KHÔNG CÓ HỆ THỐNG LƯU TRỮ NÀO KHÁC, THẦY CÔ HOÀN TOÀN YÊN TÂM!
+              </p>
             </div>
             <InputForm onSubmit={handleSubmit} isLoading={false} />
           </div>
