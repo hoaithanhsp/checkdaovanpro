@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import InputForm from './components/InputForm';
 import ResultsDashboard from './components/ResultsDashboard';
 import HistoryPanel from './components/HistoryPanel';
@@ -8,10 +8,19 @@ import LoginPage from './components/LoginPage';
 import { SKKNInput, AnalysisResult, AnalysisStatus } from './types';
 import { analyzeSKKNWithGemini } from './services/geminiService';
 import { saveToHistory, HistoryItem } from './services/historyService';
-import { getLoggedInUser, logout, VIPAccount, isTrialAccount } from './data/accounts';
+import { getLoggedInUser, logout, VIPAccount, isTrialAccount, saveLoginState } from './data/accounts';
 import { useTheme } from './contexts/ThemeContext';
-import { ShieldCheck, BookOpen, History, Sun, Moon, GitCompare, LogOut } from 'lucide-react';
+import { ShieldCheck, BookOpen, History, Sun, Moon, GitCompare, LogOut, Save, FolderOpen } from 'lucide-react';
 import { hasAnyKey } from './services/apiKeyService';
+
+// Session persistence keys
+const SESSION_SAVE_KEY = 'skkn_checker_session';
+interface CheckerSessionData {
+  input: SKKNInput;
+  result: AnalysisResult | null;
+  status: AnalysisStatus;
+  savedAt: string;
+}
 
 const App: React.FC = () => {
   const { isDark, toggleTheme } = useTheme();
@@ -62,6 +71,77 @@ const App: React.FC = () => {
     setIsLoggedIn(false);
     setLoggedInUser(null);
     setIsTrial(false);
+  };
+
+  // Khi trial user đăng nhập VIP thành công từ popup inline
+  const handleUpgradeFromTrial = () => {
+    const user = getLoggedInUser();
+    if (user) {
+      setLoggedInUser(user);
+      setIsTrial(false);
+    }
+  };
+
+  // ═══════════ SESSION PERSISTENCE ═══════════
+  const [sessionSavedAt, setSessionSavedAt] = useState<string | null>(null);
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [pendingSession, setPendingSession] = useState<CheckerSessionData | null>(null);
+
+  // Kiểm tra phiên đã lưu khi mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SESSION_SAVE_KEY);
+      if (saved) {
+        const session: CheckerSessionData = JSON.parse(saved);
+        if (session.status === AnalysisStatus.SUCCESS && session.result) {
+          setPendingSession(session);
+          setShowRestoreModal(true);
+        }
+      }
+    } catch (e) {
+      console.warn('Không thể đọc phiên đã lưu:', e);
+      localStorage.removeItem(SESSION_SAVE_KEY);
+    }
+  }, []);
+
+  // Auto-save khi có kết quả
+  const saveSession = useCallback(() => {
+    if (status !== AnalysisStatus.SUCCESS || !result) return;
+    try {
+      const sessionData: CheckerSessionData = {
+        input: currentInputRef.current || { title: '', level: '', subject: '', target: '', content: '' },
+        result,
+        status,
+        savedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(SESSION_SAVE_KEY, JSON.stringify(sessionData));
+      setSessionSavedAt(new Date().toLocaleTimeString('vi-VN'));
+    } catch (e) {
+      console.warn('Không thể lưu phiên:', e);
+    }
+  }, [status, result]);
+
+  // Auto-save debounce
+  useEffect(() => {
+    if (status !== AnalysisStatus.SUCCESS || !result) return;
+    const timer = setTimeout(() => saveSession(), 3000);
+    return () => clearTimeout(timer);
+  }, [status, result, saveSession]);
+
+  const restoreSession = () => {
+    if (!pendingSession) return;
+    if (pendingSession.result) setResult(pendingSession.result);
+    if (pendingSession.input) currentInputRef.current = pendingSession.input;
+    setStatus(pendingSession.status);
+    setShowRestoreModal(false);
+    setPendingSession(null);
+  };
+
+  const clearSavedSession = () => {
+    localStorage.removeItem(SESSION_SAVE_KEY);
+    setSessionSavedAt(null);
+    setShowRestoreModal(false);
+    setPendingSession(null);
   };
 
   const handleApiKeySave = (_apiKey: string, _model: string) => {
@@ -256,6 +336,42 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* Session Restore Modal */}
+      {showRestoreModal && pendingSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className={`rounded-2xl shadow-2xl max-w-md w-full overflow-hidden ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-6 text-center">
+              <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span className="text-3xl">💾</span>
+              </div>
+              <h3 className="text-xl font-bold text-white">Khôi phục phiên làm việc?</h3>
+              <p className="text-emerald-100 text-sm mt-1">
+                Đã lưu lúc {new Date(pendingSession.savedAt).toLocaleString('vi-VN')}
+              </p>
+            </div>
+            <div className={`p-6 space-y-4 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+              <p className="text-center text-sm">
+                Phát hiện phiên phân tích SKKN trước đó. Bạn muốn tiếp tục hay bắt đầu mới?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={restoreSession}
+                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+                >
+                  <FolderOpen size={18} /> Khôi phục
+                </button>
+                <button
+                  onClick={clearSavedSession}
+                  className={`flex-1 py-3 font-medium rounded-xl transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+                >
+                  Bắt đầu mới
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className={`shadow-sm sticky top-0 z-40 transition-colors ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -276,6 +392,21 @@ const App: React.FC = () => {
             >
               {isDark ? <Sun size={18} /> : <Moon size={18} />}
             </button>
+
+            {/* Nút Lưu phiên */}
+            {status === AnalysisStatus.SUCCESS && result && (
+              <button
+                onClick={saveSession}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-700 text-emerald-400' : 'hover:bg-emerald-50 text-emerald-600'}`}
+                title={sessionSavedAt ? `Đã lưu lúc ${sessionSavedAt}` : 'Lưu phiên làm việc'}
+              >
+                <Save size={18} />
+                <span className="hidden sm:inline">
+                  {sessionSavedAt ? `Đã lưu ${sessionSavedAt}` : 'Lưu phiên'}
+                </span>
+              </button>
+            )}
+
             <button
               onClick={() => setShowHistory(true)}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
@@ -485,7 +616,7 @@ const App: React.FC = () => {
         )}
 
         {status === AnalysisStatus.SUCCESS && result && (
-          <ResultsDashboard result={result} input={currentInputRef.current || undefined} onReset={handleReset} isTrial={isTrial} />
+          <ResultsDashboard result={result} input={currentInputRef.current || undefined} onReset={handleReset} isTrial={isTrial} onUpgradeSuccess={handleUpgradeFromTrial} />
         )}
       </main>
 
