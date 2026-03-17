@@ -9,6 +9,7 @@ export interface VIPAccount {
     username: string;
     password: string;
     displayName?: string;
+    name?: string; // Alias cho displayName (legacy)
     isTrial?: boolean;
 }
 
@@ -215,6 +216,14 @@ export const VIP_ACCOUNTS: VIPAccount[] = [
 export const authenticateUser = (username: string, password: string): VIPAccount | null => {
     const account = VIP_ACCOUNTS.find(
         acc => acc.username === username && acc.password === password
+    );
+    return account || null;
+};
+
+// Xác thực chỉ tài khoản VIP (loại trừ trial) - dùng cho popup nâng cấp inline
+export const authenticateVIPUser = (username: string, password: string): VIPAccount | null => {
+    const account = VIP_ACCOUNTS.find(
+        acc => acc.username === username && acc.password === password && !acc.isTrial
     );
     return account || null;
 };
