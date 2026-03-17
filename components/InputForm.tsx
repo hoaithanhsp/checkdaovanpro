@@ -18,7 +18,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, isLoading }) => {
     title: '',
     level: 'Tiểu học',
     subject: '',
-    target: 'Cấp Xã',
+    target: 'Cấp Trường',
     content: ''
   });
   const [inputMode, setInputMode] = useState<InputMode>('file');
