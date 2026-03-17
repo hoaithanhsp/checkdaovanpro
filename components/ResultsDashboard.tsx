@@ -6,9 +6,10 @@ import {
 } from 'recharts';
 import {
   AlertTriangle, CheckCircle, Search, FileText,
-  TrendingUp, Award, BookOpen, AlertOctagon, Download, Sparkles, FileDown, Loader2, PenLine, CheckSquare, BookMarked, Share2, Wand2, BarChart3, Wrench, Bot
+  TrendingUp, Award, BookOpen, AlertOctagon, Download, Sparkles, FileDown, Loader2, PenLine, CheckSquare, BookMarked, Share2, Wand2, BarChart3, Wrench, Bot, User, Lock, Eye, EyeOff, X
 } from 'lucide-react';
 import { exportToWord } from '../services/exportService';
+import { authenticateVIPUser, saveLoginState } from '../data/accounts';
 import RewritePanel from './RewritePanel';
 import ChecklistPanel from './ChecklistPanel';
 import ReferencesPanel from './ReferencesPanel';
@@ -24,9 +25,10 @@ interface ResultsDashboardProps {
   input?: SKKNInput;
   onReset: () => void;
   isTrial?: boolean;
+  onUpgradeSuccess?: () => void;
 }
 
-const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onReset, isTrial = false }) => {
+const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onReset, isTrial = false, onUpgradeSuccess }) => {
   const [isExporting, setIsExporting] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [selectedSegment, setSelectedSegment] = useState<PlagiarismSegment | null>(null);
@@ -40,12 +42,40 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
   const [improvementResult, setImprovementResult] = useState<ImprovementAnalysisResult | null>(null);
   const [showVIPModal, setShowVIPModal] = useState(false);
 
+  // VIP Login inline states
+  const [vipUsername, setVipUsername] = useState('');
+  const [vipPassword, setVipPassword] = useState('');
+  const [vipShowPassword, setVipShowPassword] = useState(false);
+  const [vipLoginError, setVipLoginError] = useState('');
+  const [vipLoginLoading, setVipLoginLoading] = useState(false);
+
   const handleTrialBlock = () => {
     if (isTrial) {
       setShowVIPModal(true);
+      setVipLoginError('');
+      setVipUsername('');
+      setVipPassword('');
       return true;
     }
     return false;
+  };
+
+  const handleVIPLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setVipLoginError('');
+    setVipLoginLoading(true);
+
+    await new Promise(resolve => setTimeout(resolve, 600));
+
+    const account = authenticateVIPUser(vipUsername, vipPassword);
+    if (account) {
+      saveLoginState(account);
+      setShowVIPModal(false);
+      if (onUpgradeSuccess) onUpgradeSuccess();
+    } else {
+      setVipLoginError('Tên đăng nhập hoặc mật khẩu không đúng!');
+    }
+    setVipLoginLoading(false);
   };
 
   // Safe defaults cho các trường mảng có thể undefined từ API
@@ -90,36 +120,119 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-fade-in pb-20">
 
-      {/* VIP Upgrade Modal for Trial Users */}
+      {/* VIP Upgrade Modal with Inline Login */}
       {showVIPModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setShowVIPModal(false)}>
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden relative" onClick={e => e.stopPropagation()}>
+            {/* Nút X đóng popup */}
+            <button
+              onClick={() => setShowVIPModal(false)}
+              className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center text-white transition-colors"
+              title="Đóng"
+            >
+              <X size={18} />
+            </button>
+
+            {/* Header */}
             <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-6 text-center">
               <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
                 <span className="text-3xl">⭐</span>
               </div>
               <h3 className="text-xl font-black text-white">Nâng cấp VIP</h3>
+              <p className="text-white/80 text-sm mt-1">Chỉ với <span className="font-bold text-yellow-300 text-lg">199.000đ</span> để mở khóa full tính năng</p>
             </div>
-            <div className="p-6 text-center">
-              <p className="text-gray-700 text-base leading-relaxed mb-2 font-semibold text-purple-700 text-lg">
-                ✨ Kích hoạt tài khoản VIP 199k
-              </p>
-              <p className="text-gray-600 mb-6">
-                để được sử dụng <strong>full tính năng</strong> và <strong>không giới hạn lượt</strong> và ngày sử dụng
-              </p>
-              <div className="flex flex-col gap-3">
+
+            {/* Content */}
+            <div className="p-6 space-y-5">
+              {/* Form đăng nhập VIP */}
+              <form onSubmit={handleVIPLogin} className="space-y-4">
+                <p className="text-center text-gray-700 font-semibold text-sm">
+                  ✨ Nhập tài khoản VIP để kích hoạt ngay
+                </p>
+
+                {/* Username */}
+                <div className="space-y-1">
+                  <label className="text-gray-600 text-xs font-medium flex items-center gap-1.5">
+                    <User size={14} /> Tên đăng nhập
+                  </label>
+                  <input
+                    type="text"
+                    value={vipUsername}
+                    onChange={(e) => setVipUsername(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-sm"
+                    placeholder="Nhập tên đăng nhập VIP"
+                    required
+                  />
+                </div>
+
+                {/* Password */}
+                <div className="space-y-1">
+                  <label className="text-gray-600 text-xs font-medium flex items-center gap-1.5">
+                    <Lock size={14} /> Mật khẩu
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={vipShowPassword ? 'text' : 'password'}
+                      value={vipPassword}
+                      onChange={(e) => setVipPassword(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-sm pr-10"
+                      placeholder="Nhập mật khẩu"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setVipShowPassword(!vipShowPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {vipShowPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Error */}
+                {vipLoginError && (
+                  <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-red-600 text-xs text-center font-medium">
+                    {vipLoginError}
+                  </div>
+                )}
+
+                {/* Submit */}
+                <button
+                  type="submit"
+                  disabled={vipLoginLoading}
+                  className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold rounded-xl transition-all shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {vipLoginLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      Đang xác thực...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={18} />
+                      ĐĂNG NHẬP VIP
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-gray-200"></div>
+                <span className="text-gray-400 text-xs">hoặc liên hệ đăng ký</span>
+                <div className="flex-1 h-px bg-gray-200"></div>
+              </div>
+
+              {/* Links liên hệ */}
+              <div className="flex flex-col gap-2">
                 <a href="https://zalo.me/0348296773" target="_blank" rel="noreferrer"
-                  className="w-full py-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg">
-                  💬 Liên hệ Zalo 0348296773
+                  className="w-full py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-sm shadow">
+                  💬 Zalo 0348296773
                 </a>
                 <a href="https://www.facebook.com/tranhoaithanhvicko/" target="_blank" rel="noreferrer"
-                  className="w-full py-3 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg">
+                  className="w-full py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-sm shadow">
                   👤 Facebook Trần Hoài Thanh
                 </a>
-                <button onClick={() => setShowVIPModal(false)}
-                  className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-colors">
-                  Đây rồi, cảm ơn!
-                </button>
               </div>
             </div>
           </div>
