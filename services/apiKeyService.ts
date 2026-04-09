@@ -149,6 +149,44 @@ export const resetKeyRotation = (): void => {
   exhaustedKeys.clear();
 };
 
+// ═══════════ REQUEST TRACKING (Budget Awareness) ═══════════
+const REQUEST_COUNT_KEY = 'skkn-daily-request-count';
+const REQUEST_DATE_KEY = 'skkn-daily-request-date';
+
+/**
+ * Lấy ngày hiện tại dạng YYYY-MM-DD
+ */
+const getTodayStr = (): string => new Date().toISOString().split('T')[0];
+
+/**
+ * Lấy số request đã dùng hôm nay
+ */
+export const getDailyRequestCount = (): number => {
+  const savedDate = localStorage.getItem(REQUEST_DATE_KEY);
+  if (savedDate !== getTodayStr()) {
+    localStorage.setItem(REQUEST_DATE_KEY, getTodayStr());
+    localStorage.setItem(REQUEST_COUNT_KEY, '0');
+    return 0;
+  }
+  return parseInt(localStorage.getItem(REQUEST_COUNT_KEY) || '0', 10);
+};
+
+/**
+ * Tăng số request hôm nay lên 1
+ */
+export const incrementDailyRequestCount = (): number => {
+  const today = getTodayStr();
+  const savedDate = localStorage.getItem(REQUEST_DATE_KEY);
+  if (savedDate !== today) {
+    localStorage.setItem(REQUEST_DATE_KEY, today);
+    localStorage.setItem(REQUEST_COUNT_KEY, '1');
+    return 1;
+  }
+  const newCount = getDailyRequestCount() + 1;
+  localStorage.setItem(REQUEST_COUNT_KEY, String(newCount));
+  return newCount;
+};
+
 /**
  * Kiểm tra lỗi có phải là quota/rate limit không
  */
@@ -209,16 +247,17 @@ export const getVietnameseErrorMessage = (error: any): string => {
   if (isQuotaOrRateLimitError(error)) {
     return '⚠️ Tất cả API Key đã hết quota hoặc bị giới hạn tạm thời.\n\n' +
       '📝 Hướng dẫn:\n' +
-      '1. Chờ vài phút rồi thử lại (quota sẽ được reset)\n' +
-      '2. Hoặc bấm "Đổi API Key" để nhập key mới\n' +
-      '3. Lấy key miễn phí tại: aistudio.google.com/apikey';
+      '1. Lấy API key từ một tài khoản Gmail khác để dán vào dùng tiếp\n' +
+      '2. Hoặc chờ đến ngày hôm sau để quota được reset tự động\n' +
+      '3. Bấm "Đổi API Key" để nhập key mới\n' +
+      '4. Lấy key miễn phí tại: aistudio.google.com/apikey';
   }
 
   if (isInvalidKeyError(error)) {
     return '❌ API Key không hợp lệ hoặc đã bị vô hiệu hóa.\n\n' +
       '📝 Hướng dẫn:\n' +
       '1. Kiểm tra lại API Key (phải bắt đầu bằng "AIza")\n' +
-      '2. Lấy key mới tại: aistudio.google.com/apikey\n' +
+      '2. Lấy key mới từ tài khoản Gmail khác tại: aistudio.google.com/apikey\n' +
       '3. Bấm "Đổi API Key" để nhập key mới';
   }
 

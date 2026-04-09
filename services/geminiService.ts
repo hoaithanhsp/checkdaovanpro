@@ -11,6 +11,7 @@ import {
   getCurrentActiveKey,
   getNextApiKey,
   markKeyExhausted,
+  incrementDailyRequestCount,
 } from './apiKeyService';
 
 const SYSTEM_INSTRUCTION = `
@@ -219,15 +220,17 @@ const RESPONSE_SCHEMA: Schema = {
   required: ["duplicateLevel", "duplicateDetails", "spellingErrors", "plagiarismRisk", "plagiarismSegments", "scores", "scoreDetails", "developmentPlan", "overallConclusion", "structure", "qualityCriteria", "aiRiskScore", "aiRiskLevel", "aiRiskDetails"],
 };
 
-// Fallback models theo thứ tự ưu tiên
+// Fallback models theo thứ tự ưu tiên (LỆNH.md)
+// gemini-2.5-flash → gemini-3-flash-preview → gemini-2.5-flash-lite → gemini-2.5-pro (trả phí)
 const FALLBACK_MODELS = [
-  'gemini-3-flash-preview',
   'gemini-2.5-flash',
+  'gemini-3-flash-preview',
   'gemini-2.5-flash-lite',
+  'gemini-2.5-pro',
 ];
 
-// Model mặc định
-const DEFAULT_MODEL = 'gemini-3-flash-preview';
+// Model mặc định (LỆNH.md: gemini-2.5-flash)
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 // Helper để lấy API key hiện tại (hỗ trợ auto-rotation)
 const getApiKeyOrThrow = (): string => {
@@ -318,6 +321,8 @@ ${historyPrompt}
             parsed.scores.innovation + parsed.scores.feasibility + parsed.scores.scientific + parsed.scores.presentation,
             100
           );
+          parsed.usedModel = model;
+          incrementDailyRequestCount();
           return parsed;
         } else {
           throw new Error("Empty response from Gemini");

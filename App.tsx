@@ -11,7 +11,7 @@ import { saveToHistory, HistoryItem } from './services/historyService';
 import { getLoggedInUser, logout, VIPAccount, isTrialAccount, saveLoginState } from './data/accounts';
 import { useTheme } from './contexts/ThemeContext';
 import { ShieldCheck, BookOpen, History, Sun, Moon, GitCompare, LogOut, Save, FolderOpen } from 'lucide-react';
-import { hasAnyKey } from './services/apiKeyService';
+import { hasAnyKey, getSelectedModel, getDailyRequestCount } from './services/apiKeyService';
 
 // Session persistence keys
 const SESSION_SAVE_KEY = 'skkn_checker_session';
@@ -432,6 +432,9 @@ const App: React.FC = () => {
               onClick={() => setShowApiKeyModal(true)}
               hasKey={hasApiKey}
             />
+            <span className={`px-2 py-1 rounded-full text-xs ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-500'}`} title="Số lần phân tích hôm nay">
+              {getDailyRequestCount()} lượt
+            </span>
             <span className={`px-3 py-1 rounded-full text-xs font-bold ${isDark ? 'bg-blue-900 text-blue-300' : 'bg-blue-50 text-blue-700'}`}>v1.4</span>
 
             {/* Nút Đăng xuất */}
@@ -537,6 +540,10 @@ const App: React.FC = () => {
                 {progress >= 60 && progress < 90 && "Đang đánh giá tiêu chí khoa học & tính mới..."}
                 {progress >= 90 && "Đang tổng hợp điểm số và hoàn thiện báo cáo..."}
               </p>
+              <p className="text-xs text-center text-blue-400 mt-2">
+                Model: <span className="font-semibold">{getSelectedModel()}</span>
+                <span className="text-gray-400 ml-1">(tự động chuyển model dự phòng nếu lỗi)</span>
+              </p>
             </div>
           </div>
         )}
@@ -629,7 +636,7 @@ const App: React.FC = () => {
               <span className="text-yellow-400">CHỈ VỚI 1 CÂU LỆNH</span>
             </p>
             <a
-              href="https://forms.gle/d7AmcT9MTyGy7bJd8"
+              href="https://forms.gle/19fbZmmHW5rEtxxG7"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-2 px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-full transition-all transform hover:-translate-y-1 shadow-lg shadow-blue-900/50"

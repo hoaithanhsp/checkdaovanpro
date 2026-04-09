@@ -98,6 +98,7 @@ export interface AnalysisResult {
   aiRiskScore?: number;
   aiRiskLevel?: string;
   aiRiskDetails?: AIRiskDetails;
+  usedModel?: string;
 }
 
 /**
