@@ -14,6 +14,106 @@ import {
   incrementDailyRequestCount,
 } from './apiKeyService';
 
+// ======================================================================
+// CLIENT-SIDE TEXT METRICS (Deterministic - luôn cho cùng kết quả)
+// ======================================================================
+
+/**
+ * Tính toán các chỉ số AI detection phía client.
+ * Hoàn toàn deterministic: cùng 1 nội dung → cùng 1 kết quả.
+ */
+function computeTextMetrics(text: string): {
+  burstiness: number;
+  patternDensity: number;
+  sentenceUniformity: number;
+  avgSentenceLength: number;
+  estimatedAIScore: number;
+} {
+  if (!text || text.trim().length < 50) {
+    return { burstiness: 50, patternDensity: 0, sentenceUniformity: 50, avgSentenceLength: 0, estimatedAIScore: 0 };
+  }
+
+  // --- 1. Tách câu ---
+  const sentences = text
+    .replace(/\n+/g, '. ')
+    .split(/[.!?;]+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 5);
+
+  if (sentences.length < 3) {
+    return { burstiness: 50, patternDensity: 0, sentenceUniformity: 50, avgSentenceLength: 0, estimatedAIScore: 0 };
+  }
+
+  // --- 2. Burstiness: Variance độ dài câu ---
+  // AI viết câu đều đặn → burstiness thấp. Người viết → burstiness cao.
+  const lengths = sentences.map(s => s.split(/\s+/).length);
+  const avgLen = lengths.reduce((a, b) => a + b, 0) / lengths.length;
+  const variance = lengths.reduce((sum, l) => sum + Math.pow(l - avgLen, 2), 0) / lengths.length;
+  const stdDev = Math.sqrt(variance);
+  const coeffOfVariation = avgLen > 0 ? (stdDev / avgLen) * 100 : 0;
+  // CV < 20% → câu rất đều (nghi AI), CV > 40% → câu đa dạng (người viết)
+  const burstiness = Math.min(100, Math.max(0, Math.round(coeffOfVariation * 2)));
+
+  // --- 3. Pattern Density: Đếm mẫu câu đặc trưng AI ---
+  const aiPatterns = [
+    /trong bối cảnh.*hiện nay/gi,
+    /theo định hướng.*chương trình/gi,
+    /việc.*là (yêu cầu|vấn đề) cấp thiết/gi,
+    /tuy nhiên.*thực tế cho thấy/gi,
+    /không chỉ.*mà còn/gi,
+    /điều này cho thấy.*rằng/gi,
+    /một cách.*hiệu quả/gi,
+    /đáng chú ý là/gi,
+    /cần lưu ý rằng/gi,
+    /do đó.*là (rất )?cần thiết/gi,
+    /qua đó.*học sinh/gi,
+    /nói cách khác/gi,
+    /tóm lại/gi,
+    /từ những phân tích trên/gi,
+    /có thể (thấy|nhận thấy|khẳng định) rằng/gi,
+    /điều đáng (chú ý|xem xét) là/gi,
+    /một (điểm|khía cạnh) đáng (chú ý|xem xét)/gi,
+  ];
+  let patternCount = 0;
+  for (const pattern of aiPatterns) {
+    const matches = text.match(pattern);
+    if (matches) patternCount += matches.length;
+  }
+  // Chuẩn hóa: trên 1000 từ
+  const wordCount = text.split(/\s+/).length;
+  const patternsPer1000 = wordCount > 0 ? (patternCount / wordCount) * 1000 : 0;
+  // > 5 patterns/1000 từ → nghi AI cao
+  const patternDensity = Math.min(100, Math.max(0, Math.round(patternsPer1000 * 15)));
+
+  // --- 4. Sentence Uniformity: Đo mức đồng đều cấu trúc câu ---
+  // Đếm câu bắt đầu giống nhau (cùng 2-3 từ đầu)
+  const starters = sentences.map(s => s.split(/\s+/).slice(0, 3).join(' ').toLowerCase());
+  const starterCounts: Record<string, number> = {};
+  for (const s of starters) {
+    starterCounts[s] = (starterCounts[s] || 0) + 1;
+  }
+  const repeatedStarters = Object.values(starterCounts).filter(c => c > 1).reduce((a, b) => a + b, 0);
+  const uniformityRatio = sentences.length > 0 ? (repeatedStarters / sentences.length) * 100 : 0;
+  const sentenceUniformity = Math.min(100, Math.round(uniformityRatio));
+
+  // --- 5. Estimated AI Score (deterministic) ---
+  // Trọng số: patternDensity (40%), burstiness nghịch (35%), uniformity (25%)
+  const burstiScore = Math.max(0, 100 - burstiness); // burstiness thấp → nghi AI → score cao
+  const estimatedAIScore = Math.min(100, Math.max(0, Math.round(
+    patternDensity * 0.40 +
+    burstiScore * 0.35 +
+    sentenceUniformity * 0.25
+  )));
+
+  return {
+    burstiness,
+    patternDensity,
+    sentenceUniformity,
+    avgSentenceLength: Math.round(avgLen * 10) / 10,
+    estimatedAIScore,
+  };
+}
+
 const SYSTEM_INSTRUCTION = `
 Bạn là "SKKN Checker Pro" - Chuyên gia thẩm định Sáng kiến kinh nghiệm (SKKN) với 20 năm kinh nghiệm.
 Nhiệm vụ của bạn là kiểm tra đạo văn CHẶT CHẼ, chính tả, đánh giá và đề xuất nâng cấp SKKN dựa trên tiêu chí Thông tư 27/2020/TT-BGDĐT và các văn bản pháp lý liên quan (Thông tư 18/2013/TT-BKHCN, Thông tư 20/2018/TT-BGDĐT).
@@ -262,6 +362,10 @@ export const analyzeSKKNWithGemini = async (input: SKKNInput): Promise<AnalysisR
   const selectedModel = getModel();
   const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
 
+  // --- TÍNH TOÁN CLIENT-SIDE AI METRICS (Deterministic) ---
+  const clientMetrics = computeTextMetrics(input.content);
+  console.log(`[analyzeSKKN] Client AI Metrics:`, clientMetrics);
+
   let historyPrompt = "";
   try {
     const history = getHistory();
@@ -270,12 +374,17 @@ export const analyzeSKKNWithGemini = async (input: SKKNInput): Promise<AnalysisR
       item.input.subject === input.subject
     );
     if (prevItem && prevItem.result && prevItem.result.scores) {
-      const prevScore = prevItem.result.scores.total;
-      historyPrompt = `
+      // CHỈ ép tăng điểm nếu NỘI DUNG ĐÃ THAY ĐỔI
+      const contentChanged = prevItem.input.content !== input.content;
+      if (contentChanged) {
+        const prevScore = prevItem.result.scores.total;
+        historyPrompt = `
 ⚠️ QUY ĐỊNH CHẤM ĐIỂM BẢN CẬP NHẬT:
-Hệ thống nhận diện đây là phiên bản cập nhật của đề tài "${input.title}". Điểm lần chấm trước là: ${prevScore} điểm.
-YÊU CẦU BẮT BUỘC KHẮT KHE: Nếu bản văn này đã có sự cải thiện, chỉnh sửa các lỗi chữ đỏ, lời văn tự nhiên hơn và giải quyết các điểm yếu, bạn PHẢI cho tổng điểm (\`scores.total\`) CAO HƠN bản trước ít nhất 1 đến 2 điểm (nếu bản trước chưa đạt tối đa). Hãy tính toán các tiêu chí thành phần cẩn thận để đảm bảo điểm tổng mới thỏa mãn điều kiện > ${prevScore}. Đây là luật cứng của hệ thống đảm bảo hợp tình hợp lý.
+Hệ thống nhận diện đây là phiên bản cập nhật (NỘI DUNG ĐÃ THAY ĐỔI) của đề tài "${input.title}". Điểm lần chấm trước là: ${prevScore} điểm.
+YÊU CẦU BẮT BUỘC: Nếu bản văn này đã có sự cải thiện, bạn PHẢI cho tổng điểm cao hơn bản trước 1-2 điểm (nếu chưa đạt tối đa). Hãy tính toán cẩn thận để đảm bảo điểm tổng mới > ${prevScore}.
 `;
+      }
+      // Nếu nội dung KHÔNG đổi → KHÔNG thêm historyPrompt → chấm khách quan
     }
   } catch (e) {
     console.error("Lỗi đọc lịch sử:", e);
@@ -288,6 +397,14 @@ YÊU CẦU BẮT BUỘC KHẮT KHE: Nếu bản văn này đã có sự cải th
     - Môn học: ${input.subject}
     - Mục tiêu giải: ${input.target}
 ${historyPrompt}
+
+    📊 DỮ LIỆU AI DETECTION TÍNH TOÁN TỪ HỆ THỐNG (deterministic, đã được đo lường chính xác):
+    - Burstiness Score (biến động độ dài câu): ${clientMetrics.burstiness}/100 (${clientMetrics.burstiness < 30 ? 'THẤP - câu đều đặn, đặc trưng AI' : clientMetrics.burstiness > 60 ? 'CAO - câu đa dạng, đặc trưng người viết' : 'TRUNG BÌNH'})
+    - Pattern Density (mật độ mẫu câu AI): ${clientMetrics.patternDensity}/100 (${clientMetrics.patternDensity > 40 ? 'CAO - nhiều cụm từ đặc trưng AI' : clientMetrics.patternDensity < 15 ? 'THẤP - ít mẫu câu AI' : 'TRUNG BÌNH'})
+    - Sentence Uniformity (tính đồng đều câu): ${clientMetrics.sentenceUniformity}/100
+    - Estimated AI Score từ hệ thống: ${clientMetrics.estimatedAIScore}%
+    ⚠️ QUAN TRỌNG: Hãy THAM KHẢO các chỉ số trên khi đánh giá aiRiskScore. Điểm AI cuối cùng của bạn nên KHÔNG CHÊNH QUÁ ±15 điểm so với Estimated AI Score ${clientMetrics.estimatedAIScore}%. Nếu bạn thấy khác biệt lớn, hãy giải thích trong nhận xét.
+
     - Nội dung: ${input.content}
   `;
 
@@ -309,6 +426,7 @@ ${historyPrompt}
             systemInstruction: SYSTEM_INSTRUCTION,
             responseMimeType: "application/json",
             responseSchema: RESPONSE_SCHEMA,
+            temperature: 0,
           },
         });
 
@@ -328,6 +446,35 @@ ${historyPrompt}
             parsed.scores.innovation + parsed.scores.feasibility + parsed.scores.scientific + parsed.scores.presentation,
             100
           );
+          // --- TRỘN AI RISK SCORE: 60% client (deterministic) + 40% Gemini ---
+          const geminiAIScore = Number(parsed.aiRiskScore) || 0;
+          const blendedAIScore = Math.round(
+            clientMetrics.estimatedAIScore * 0.6 + geminiAIScore * 0.4
+          );
+          parsed.aiRiskScore = Math.min(100, Math.max(0, blendedAIScore));
+
+          // --- VALIDATION: Đồng bộ aiRiskLevel với aiRiskScore ---
+          if (parsed.aiRiskScore < 15) {
+            parsed.aiRiskLevel = 'Thấp';
+          } else if (parsed.aiRiskScore < 35) {
+            parsed.aiRiskLevel = 'Trung bình';
+          } else if (parsed.aiRiskScore < 60) {
+            parsed.aiRiskLevel = 'Cao';
+          } else {
+            parsed.aiRiskLevel = 'Rất cao';
+          }
+
+          // --- VALIDATION: Đồng bộ overallAIPercent ---
+          if (parsed.aiRiskDetails) {
+            parsed.aiRiskDetails.overallAIPercent = parsed.aiRiskScore;
+            // Đồng bộ burstiness từ client metrics (deterministic)
+            parsed.aiRiskDetails.burstinessScore = clientMetrics.burstiness;
+            // Đồng bộ patternDensity từ client metrics (deterministic)
+            parsed.aiRiskDetails.patternDensity = clientMetrics.patternDensity;
+          }
+
+          console.log(`[analyzeSKKN] AI Score: Client=${clientMetrics.estimatedAIScore}% | Gemini=${geminiAIScore}% | Blended=${parsed.aiRiskScore}%`);
+
           parsed.usedModel = model;
           incrementDailyRequestCount();
           return parsed;
