@@ -20,14 +20,14 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result }) => {
 
     // Default qualityCriteria if not provided
     const qualityCriteria = result.qualityCriteria || [
-        { criteria: 'Cấu trúc', score: 7, comment: '' },
-        { criteria: 'Lý luận', score: 6, comment: '' },
-        { criteria: 'Số liệu', score: 5, comment: '' },
-        { criteria: 'Khả thi', score: 7, comment: '' },
-        { criteria: 'PPNC', score: 6, comment: '' },
-        { criteria: 'Ngôn ngữ', score: 7, comment: '' },
-        { criteria: 'Thực tiễn', score: 6, comment: '' },
-        { criteria: 'Tính mới', score: 5, comment: '' },
+        { criteria: 'Tính mới', score: 7, comment: 'Đang tải nhận xét...' },
+        { criteria: 'Cơ sở lý luận và thực tiễn', score: 6, comment: 'Đang tải nhận xét...' },
+        { criteria: 'Giải pháp/Biện pháp', score: 6, comment: 'Đang tải nhận xét...' },
+        { criteria: 'Kết quả và hiệu quả', score: 5, comment: 'Đang tải nhận xét...' },
+        { criteria: 'Tính khả thi và khả năng nhân rộng', score: 6, comment: 'Đang tải nhận xét...' },
+        { criteria: 'Ngôn ngữ và chính tả', score: 7, comment: 'Đang tải nhận xét...' },
+        { criteria: 'Hình thức trình bày', score: 7, comment: 'Đang tải nhận xét...' },
+        { criteria: 'Tính ứng dụng thực tế', score: 6, comment: 'Đang tải nhận xét...' },
     ];
 
     const chartData = qualityCriteria.map(c => ({
