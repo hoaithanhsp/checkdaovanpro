@@ -212,6 +212,9 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result }) => {
                     }}>
                         {aiRiskLabel.text}
                     </span>
+                    <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, lineHeight: 1.4, maxWidth: 200, margin: '8px auto 0' }}>
+                        ⚠️ Chỉ số AI mang tính tham khảo, có thể dao động ±5%. Không thay thế phần mềm phát hiện AI chuyên dụng.
+                    </p>
                 </div>
 
                 {/* Structure */}
