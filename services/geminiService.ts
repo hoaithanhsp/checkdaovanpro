@@ -87,6 +87,12 @@ Hãy mô phỏng quá trình kiểm tra một cách CHẶT CHẼ và CHUYÊN NGH
 Nếu nội dung quá ngắn (<200 từ), hãy cảnh báo trong phần kết luận nhưng vẫn cố gắng phân tích cấu trúc.
 Nếu phát hiện tiêu chuẩn loại trừ, PHẢI ghi rõ trong overallConclusion và đặt plagiarismRisk = "Rất cao".
 
+## 📋 ĐÁNH GIÁ CHI TIẾT TỪNG TIÊU CHÍ (qualityCriteria) - BẮT BUỘC
+Bạn PHẢI đánh giá 8-10 tiêu chí chất lượng với nhận xét chi tiết. Mỗi tiêu chí gồm:
+- **criteria**: Tên tiêu chí (Tính mới, Cơ sở lý luận và thực tiễn, Giải pháp/Biện pháp, Kết quả và hiệu quả, Tính khả thi và khả năng nhân rộng, Ngôn ngữ và chính tả, Hình thức trình bày, Tính ứng dụng thực tế, v.v.)
+- **score**: Điểm từ 0-10
+- **comment**: NHẬN XÉT CHI TIẾT (BẮT BUỘC, KHÔNG ĐƯỢC ĐỂ TRỐNG). Viết 1-3 câu nhận xét cụ thể dựa trên nội dung SKKN đã đọc. Ví dụ: "Giải pháp ứng dụng Kahoot trong dạy học Hóa khá sáng tạo, tuy nhiên chưa có dữ liệu so sánh trước-sau để minh chứng hiệu quả" hoặc "Số liệu thống kê chi tiết với 31/45 HS đạt trên TB, có biểu đồ minh họa rõ ràng". KHÔNG viết chung chung như "Tốt" hay "Khá".
+
 ⚠️ CẢNH BÁO CUỐI: Bạn là giám khảo NGHIÊM KHẮC, không phải người khích lệ. Nếu SKKN sơ sài, hãy chấm điểm THẤP và giải thích rõ lý do. Điểm 90-100 là CỰC KỲ HIẾM - chỉ dành cho SKKN thực sự xuất sắc với đầy đủ minh chứng.
 
 ## 🤖 PHÂN TÍCH NGUY CƠ AI (AI Risk Detection)
@@ -192,14 +198,15 @@ const RESPONSE_SCHEMA: Schema = {
     },
     qualityCriteria: {
       type: Type.ARRAY,
-      description: "Điểm chi tiết từng tiêu chí chất lượng (8-10 tiêu chí), mỗi tiêu chí chấm 0-10",
+      description: "Điểm chi tiết từng tiêu chí chất lượng (8-10 tiêu chí), mỗi tiêu chí chấm 0-10. BẮT BUỘC phải có nhận xét chi tiết cho từng tiêu chí.",
       items: {
         type: Type.OBJECT,
         properties: {
-          criteria: { type: Type.STRING, description: "Tên tiêu chí (VD: Cấu trúc, Lý luận, Số liệu, Khả thi, PPNC, Ngôn ngữ, Thực tiễn, Tính mới, Nhân rộng, Hình thức)" },
+          criteria: { type: Type.STRING, description: "Tên tiêu chí (VD: Tính mới, Cơ sở lý luận và thực tiễn, Giải pháp/Biện pháp, Kết quả và hiệu quả, Tính khả thi và khả năng nhân rộng, Ngôn ngữ và chính tả, Hình thức trình bày, Tính ứng dụng thực tế)" },
           score: { type: Type.NUMBER, description: "Điểm từ 0-10" },
-          comment: { type: Type.STRING, description: "Nhận xét ngắn gọn" },
+          comment: { type: Type.STRING, description: "NHẬN XÉT CHI TIẾT BẮT BUỘC (1-3 câu). Phải viết nhận xét cụ thể dựa trên nội dung SKKN, chỉ rõ điểm mạnh/yếu. KHÔNG ĐƯỢC để trống hoặc viết chung chung. VD: 'Giải pháp ứng dụng CNTT khá sáng tạo nhưng thiếu số liệu so sánh trước-sau' hoặc 'Cơ sở lý luận vững chắc với 5 tài liệu tham khảo cập nhật, tuy nhiên phần thực trạng cần bổ sung khảo sát thực tế tại đơn vị'." },
         },
+        required: ["criteria", "score", "comment"],
       },
     },
     aiRiskScore: { type: Type.NUMBER, description: "Điểm nguy cơ AI từ 0-100 (0 = hoàn toàn người viết, 100 = hoàn toàn AI)" },
