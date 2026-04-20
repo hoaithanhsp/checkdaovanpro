@@ -28,6 +28,7 @@ export const VIP_ACCOUNTS: VIPAccount[] = [
     TRIAL_ACCOUNT,
     { username: "admin", password: "admin123", displayName: "Quản trị viên" },
     { username: "trannguyenyennhi19@gmail.com", password: "SKKN100", name: "GV" },
+    { username: "khangbizaz@gmail.com", password: "SKKN100", name: "GV" },
     { username: "hongvanngo2026@gmail.com", password: "SKKN100", name: "GV" },
     { username: "truongan02194@gmail.com", password: "SKKN100", name: "GV" },
     { username: "hanggautp1994@gmail.com", password: "SKKN100", name: "GV" },
