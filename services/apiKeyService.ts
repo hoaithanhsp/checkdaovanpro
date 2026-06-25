@@ -6,6 +6,14 @@
 
 const STORAGE_KEY = 'skkn-gemini-api-key';
 const MODEL_STORAGE_KEY = 'skkn-gemini-model';
+export const GOOGLE_AI_API_KEY_PATTERN = /^(?:AIzaSy|AQ)\S{8,}$/;
+
+export type GeminiApiErrorType =
+  | 'QUOTA_EXCEEDED'
+  | 'MODEL_OVERLOADED'
+  | 'INVALID_API_KEY'
+  | 'MODEL_NOT_FOUND'
+  | 'UNKNOWN';
 
 /**
  * Làm sạch API key - loại bỏ khoảng trắng, ký tự Unicode ẩn, BOM
@@ -16,6 +24,10 @@ const sanitizeApiKey = (key: string): string => {
     .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
     .replace(/[^\x20-\x7E]/g, '')
     .trim();
+};
+
+export const isValidGoogleAiApiKey = (key: string): boolean => {
+  return GOOGLE_AI_API_KEY_PATTERN.test(sanitizeApiKey(key));
 };
 
 /**
@@ -190,20 +202,59 @@ export const incrementDailyRequestCount = (): number => {
 /**
  * Kiểm tra lỗi có phải là quota/rate limit không
  */
+const getErrorInfo = (error: any): { message: string; serialized: string; text: string; statusText: string } => {
+  const message = error?.message || error?.toString?.() || '';
+  let serialized = '';
+  try {
+    serialized = JSON.stringify(error) || '';
+  } catch {
+    serialized = '';
+  }
+
+  const status = error?.status ?? error?.code ?? error?.response?.status ?? '';
+  return {
+    message,
+    serialized,
+    text: `${message} ${serialized}`.toLowerCase(),
+    statusText: String(status).toLowerCase(),
+  };
+};
+
+const hasStatusCode = (statusText: string, code: number): boolean => {
+  return statusText === String(code) || statusText.includes(String(code));
+};
+
 export const isQuotaOrRateLimitError = (error: any): boolean => {
   if (!error) return false;
-  const message = error.message?.toLowerCase() || '';
-  const status = error.status || error.code;
+  const { text, statusText } = getErrorInfo(error);
   // Không coi lỗi model not found là quota error
   if (isModelNotFoundError(error)) return false;
+  // 503/UNAVAILABLE là lỗi model/service quá tải, không phải quota hay key hỏng
+  if (isModelOverloadedError(error)) return false;
   return (
-    status === 429 ||
-    status === 503 ||
-    message.includes('quota') ||
-    message.includes('rate limit') ||
-    message.includes('resource exhausted') ||
-    message.includes('too many requests') ||
-    message.includes('overloaded')
+    hasStatusCode(statusText, 429) ||
+    text.includes('quota') ||
+    text.includes('rate limit') ||
+    text.includes('resource exhausted') ||
+    text.includes('too many requests')
+  );
+};
+
+/**
+ * Kiểm tra lỗi model/service quá tải tạm thời (503 / UNAVAILABLE)
+ * Lỗi này không được đánh dấu API key hết quota hoặc invalid.
+ */
+export const isModelOverloadedError = (error: any): boolean => {
+  if (!error) return false;
+  const { text, statusText } = getErrorInfo(error);
+  return (
+    hasStatusCode(statusText, 503) ||
+    statusText.includes('unavailable') ||
+    text.includes('503') ||
+    text.includes('unavailable') ||
+    text.includes('high demand') ||
+    text.includes('overloaded') ||
+    text.includes('try again later')
   );
 };
 
@@ -213,14 +264,14 @@ export const isQuotaOrRateLimitError = (error: any): boolean => {
  */
 export const isModelNotFoundError = (error: any): boolean => {
   if (!error) return false;
-  const message = error.message?.toLowerCase() || '';
-  const status = error.status || error.code;
+  const { text, statusText } = getErrorInfo(error);
   return (
-    status === 404 ||
-    message.includes('not found') ||
-    message.includes('is not found') ||
-    message.includes('model') && message.includes('not') ||
-    message.includes('models/') && message.includes('not')
+    hasStatusCode(statusText, 404) ||
+    statusText.includes('not_found') ||
+    text.includes('not found') ||
+    text.includes('is not found') ||
+    text.includes('model') && text.includes('not') ||
+    text.includes('models/') && text.includes('not')
   );
 };
 
@@ -229,21 +280,37 @@ export const isModelNotFoundError = (error: any): boolean => {
  */
 export const isInvalidKeyError = (error: any): boolean => {
   if (!error) return false;
-  const message = error.message?.toLowerCase() || '';
-  const status = error.status || error.code;
+  const { text, statusText } = getErrorInfo(error);
   return (
-    status === 401 ||
-    status === 403 ||
-    message.includes('invalid api key') ||
-    message.includes('api key not valid') ||
-    message.includes('permission denied')
+    hasStatusCode(statusText, 401) ||
+    hasStatusCode(statusText, 403) ||
+    text.includes('api_key_invalid') ||
+    text.includes('invalid api key') ||
+    text.includes('api key not valid') ||
+    text.includes('permission denied')
   );
+};
+
+export const parseApiError = (error: any): GeminiApiErrorType => {
+  if (isModelOverloadedError(error)) return 'MODEL_OVERLOADED';
+  if (isModelNotFoundError(error)) return 'MODEL_NOT_FOUND';
+  if (isQuotaOrRateLimitError(error)) return 'QUOTA_EXCEEDED';
+  if (isInvalidKeyError(error)) return 'INVALID_API_KEY';
+  return 'UNKNOWN';
 };
 
 /**
  * Tạo thông báo lỗi tiếng Việt
  */
 export const getVietnameseErrorMessage = (error: any): string => {
+  if (isModelOverloadedError(error)) {
+    return '⚠️ Model Gemini đang quá tải tạm thời.\n\n' +
+      '📝 Hướng dẫn:\n' +
+      '1. Hệ thống sẽ tự thử model dự phòng khi có thể\n' +
+      '2. Vui lòng thử lại sau ít phút hoặc chọn model nhẹ hơn như Gemini 2.5 Flash Lite\n' +
+      '3. API Key vẫn còn hiệu lực, không cần đổi key chỉ vì lỗi quá tải model';
+  }
+
   if (isQuotaOrRateLimitError(error)) {
     return '⚠️ Tất cả API Key đã hết quota hoặc bị giới hạn tạm thời.\n\n' +
       '📝 Hướng dẫn:\n' +
@@ -256,7 +323,7 @@ export const getVietnameseErrorMessage = (error: any): string => {
   if (isInvalidKeyError(error)) {
     return '❌ API Key không hợp lệ hoặc đã bị vô hiệu hóa.\n\n' +
       '📝 Hướng dẫn:\n' +
-      '1. Kiểm tra lại API Key (phải bắt đầu bằng "AIza")\n' +
+      '1. Kiểm tra lại API Key (phải bắt đầu bằng "AIzaSy" hoặc "AQ")\n' +
       '2. Lấy key mới từ tài khoản Gmail khác tại: aistudio.google.com/apikey\n' +
       '3. Bấm "Đổi API Key" để nhập key mới';
   }

@@ -5,13 +5,14 @@
  */
 
 import { GoogleGenAI } from "@google/genai";
-import { getSelectedModel } from './apiKeyService';
+import { getSelectedModel, isInvalidKeyError } from './apiKeyService';
 
 // Fallback models theo thứ tự ưu tiên
 const FALLBACK_MODELS = [
-    'gemini-2.0-flash',
-    'gemini-2.5-flash-preview-05-20',
-    'gemini-2.5-flash-lite'
+    'gemini-2.5-flash',
+    'gemini-3-flash-preview',
+    'gemini-2.5-flash-lite',
+    'gemini-2.5-pro',
 ];
 
 // ==================== TYPES ====================
@@ -355,6 +356,9 @@ Trả về mảng JSON, mỗi phần tử có cấu trúc:
             } catch (error: any) {
                 console.warn(`[TextNormalizer] Model ${model} thất bại:`, error.message);
                 lastError = error;
+                if (isInvalidKeyError(error)) {
+                    break;
+                }
                 // Tiếp tục thử model khác
             }
         }

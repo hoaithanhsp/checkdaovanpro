@@ -7,6 +7,7 @@ import {
     saveSelectedModel,
     hasAnyKey,
     ENV_API_KEYS,
+    isValidGoogleAiApiKey,
 } from '../services/apiKeyService';
 
 /** Ẩn API key, chỉ hiện 4 ký tự đầu + 4 ký tự cuối */
@@ -97,8 +98,8 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
             setError('Vui lòng nhập API Key');
             return;
         }
-        if (!key.startsWith('AIza')) {
-            setError('API Key không hợp lệ. Key phải bắt đầu bằng "AIza"');
+        if (!isValidGoogleAiApiKey(key)) {
+            setError('API Key không hợp lệ. Key phải bắt đầu bằng "AIzaSy" hoặc "AQ"');
             return;
         }
 
@@ -197,7 +198,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
                                     type={showKey ? 'text' : 'password'}
                                     value={apiKeyInput}
                                     onChange={(e) => { setApiKeyInput(e.target.value); setError(''); }}
-                                    placeholder="AIza..."
+                                    placeholder="AIzaSy... hoặc AQ..."
                                     className="w-full px-4 py-3 pr-20 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-400 text-sm font-mono"
                                 />
                                 <button
