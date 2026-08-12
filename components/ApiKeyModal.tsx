@@ -176,6 +176,15 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
 
                 {/* Content */}
                 <div className="p-6 space-y-6">
+                    {/* Safety Notice - Giúp Google Safe Browsing hiểu đây không phải phishing */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700">
+                        <p className="font-semibold mb-1">🔒 Thông tin an toàn:</p>
+                        <p>
+                            Đây là công cụ giáo dục hỗ trợ giáo viên kiểm tra SKKN. API Key là mã miễn phí bạn tự tạo tại{' '}
+                            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="underline font-medium">Google AI Studio</a>
+                            {' '}— <strong>không phải mật khẩu</strong>. Key được lưu trên trình duyệt của bạn, không gửi cho bên thứ ba.
+                        </p>
+                    </div>
                     {/* ═══ PROVIDER SELECTION ═══ */}
                     <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-3">
