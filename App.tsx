@@ -52,9 +52,8 @@ const App: React.FC = () => {
     // Kiểm tra có API key nào không (hỗ trợ nhiều key)
     const hasKey = hasAnyKey();
     setHasApiKey(hasKey);
-    if (!hasKey && user) {
-      setShowApiKeyModal(true);
-    }
+    // KHÔNG tự động mở modal - tránh bị Google Safe Browsing flag là phishing
+    // Người dùng sẽ thấy banner inline hướng dẫn nhập key khi cần
   }, []);
 
   const handleLoginSuccess = (account: VIPAccount) => {
@@ -226,7 +225,7 @@ const App: React.FC = () => {
         isOpen={showApiKeyModal}
         onClose={() => setShowApiKeyModal(false)}
         onSave={handleApiKeySave}
-        isRequired={!hasApiKey}
+        isRequired={false}
       />
 
       {/* Guide Modal */}
@@ -503,6 +502,32 @@ const App: React.FC = () => {
                 APP ĐẢM BẢO BẢO MẬT NỘI DUNG SKKN CỦA THẦY CÔ, CHỈ LƯU CỤC BỘ TRÊN MÁY THẦY CÔ, KHÔNG CÓ HỆ THỐNG LƯU TRỮ NÀO KHÁC, THẦY CÔ HOÀN TOÀN YÊN TÂM!
               </p>
             </div>
+
+            {/* Inline API Key Banner - hiện khi chưa có key, thay cho popup */}
+            {!hasApiKey && (
+              <div className="w-full max-w-2xl mx-auto mb-6 bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl mt-0.5">🔑</div>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-amber-800 text-base mb-1">Cần API Key để bắt đầu</h3>
+                    <p className="text-sm text-amber-700 mb-3">
+                      API Key là mã miễn phí bạn tự tạo tại{' '}
+                      <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="underline font-semibold text-blue-600 hover:text-blue-700">
+                        Google AI Studio
+                      </a>
+                      {' '}— <strong>không phải mật khẩu hay thông tin cá nhân</strong>. Key chỉ lưu trên trình duyệt của bạn.
+                    </p>
+                    <button
+                      onClick={() => setShowApiKeyModal(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors"
+                    >
+                      ⚙️ Cài đặt API Key
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <InputForm onSubmit={handleSubmit} isLoading={false} />
           </div>
         )}
