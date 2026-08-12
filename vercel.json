@@ -1,7 +1,7 @@
 {
     "rewrites": [
         {
-            "source": "/((?!google31f4ce009e5315f3\\.html).*)",
+            "source": "/((?!google31f4ce009e5315f3\\.html|google334d9e8f1632d625\\.html).*)",
             "destination": "/index.html"
         }
     ],
