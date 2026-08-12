@@ -144,7 +144,7 @@ const App: React.FC = () => {
     setPendingSession(null);
   };
 
-  const handleApiKeySave = (_apiKey: string, _model: string) => {
+  const handleApiKeySave = (_apiKey: string, _model: string, _provider?: string) => {
     // Refresh trạng thái key sau khi save
     setHasApiKey(hasAnyKey());
   };

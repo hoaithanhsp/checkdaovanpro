@@ -1,13 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { X, Key, ExternalLink, Check, AlertCircle, Settings, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Key, ExternalLink, Check, AlertCircle, Settings } from 'lucide-react';
 import {
     getApiKey,
     saveApiKey,
+    getAgentPlatformApiKey,
+    saveAgentPlatformApiKey,
     getSelectedModel,
     saveSelectedModel,
+    getProvider,
+    saveProvider,
     hasAnyKey,
     ENV_API_KEYS,
     isValidGoogleAiApiKey,
+    GEMINI_UI_MODELS,
+    AGENT_PLATFORM_UI_MODELS,
+    DEFAULT_MODEL_BY_PROVIDER,
+    AiProvider,
 } from '../services/apiKeyService';
 
 /** Ẩn API key, chỉ hiện 4 ký tự đầu + 4 ký tự cuối */
@@ -19,23 +27,9 @@ const maskKey = (key: string): string => {
 interface ApiKeyModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (apiKey: string, model: string) => void;
+    onSave: (apiKey: string, model: string, provider: AiProvider) => void;
     isRequired?: boolean;
 }
-
-const FREE_MODELS = [
-    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Cân bằng chi phí/hiệu năng, ổn định', default: true },
-    { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview', description: 'Reasoning mạnh, frontier-class' },
-    { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', description: 'Nhanh nhất, tiết kiệm quota' },
-];
-
-const PAID_MODELS = [
-    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Cân bằng chi phí/hiệu năng, ổn định', default: true },
-    { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview', description: 'Reasoning mạnh, frontier-class' },
-    { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', description: 'Nhanh nhất, tiết kiệm quota' },
-    { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro Preview', description: 'Frontier model, reasoning sâu', paid: true },
-    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: 'Chất lượng cao nhất, coding/analysis', paid: true },
-];
 
 export const getStoredApiKey = (): string => {
     return getApiKey();
@@ -52,21 +46,32 @@ export const saveApiKeyAndModel = (apiKey: string, model: string): void => {
 
 const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRequired = false }) => {
     const [apiKeyInput, setApiKeyInput] = useState('');
-    const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
+    const [selectedModel, setSelectedModel] = useState('gemini-3.6-flash');
     const [error, setError] = useState('');
     const [showKey, setShowKey] = useState(false);
     const [inputMode, setInputMode] = useState<'env' | 'manual'>('env');
+    const [provider, setProvider] = useState<AiProvider>('gemini');
 
     const hasEnvKeys = ENV_API_KEYS.length > 0;
 
+    // Model list theo provider
+    const modelList = provider === 'agent-platform' ? AGENT_PLATFORM_UI_MODELS : GEMINI_UI_MODELS;
+
     useEffect(() => {
         if (isOpen) {
-            const currentKey = getApiKey();
+            const currentProvider = getProvider();
+            setProvider(currentProvider);
+
+            // Load key theo provider
+            const currentKey = currentProvider === 'agent-platform'
+                ? getAgentPlatformApiKey()
+                : getApiKey();
             setApiKeyInput(currentKey);
             setSelectedModel(getSelectedModel());
             setError('');
-            // Nếu chưa có key user nhập → mặc định dùng env
-            if (!currentKey && hasEnvKeys) {
+
+            // Nếu Gemini và chưa có key user → dùng env
+            if (currentProvider === 'gemini' && !currentKey && hasEnvKeys) {
                 setInputMode('env');
             } else if (currentKey) {
                 setInputMode('manual');
@@ -76,6 +81,34 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
         }
     }, [isOpen]);
 
+    // Khi đổi provider → load key tương ứng + reset model nếu không tương thích
+    const handleProviderChange = (newProvider: AiProvider) => {
+        setProvider(newProvider);
+        setError('');
+
+        // Load key cho provider mới
+        const key = newProvider === 'agent-platform'
+            ? getAgentPlatformApiKey()
+            : getApiKey();
+        setApiKeyInput(key);
+
+        // Kiểm tra model có tương thích không
+        const newModels = newProvider === 'agent-platform' ? AGENT_PLATFORM_UI_MODELS : GEMINI_UI_MODELS;
+        const isModelValid = newModels.some(m => m.id === selectedModel);
+        if (!isModelValid) {
+            setSelectedModel(DEFAULT_MODEL_BY_PROVIDER[newProvider]);
+        }
+
+        // Agent Platform không có env keys
+        if (newProvider === 'agent-platform') {
+            setInputMode('manual');
+        } else if (!key && hasEnvKeys) {
+            setInputMode('env');
+        } else {
+            setInputMode('manual');
+        }
+    };
+
     const handleSwitchToManual = () => {
         setInputMode('manual');
         setApiKeyInput('');
@@ -83,11 +116,12 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
     };
 
     const handleSave = () => {
-        if (inputMode === 'env' && hasEnvKeys) {
+        if (inputMode === 'env' && hasEnvKeys && provider === 'gemini') {
             // Dùng env keys → xóa key user để hệ thống tự dùng env keys
             saveApiKey('');
             saveSelectedModel(selectedModel);
-            onSave('', selectedModel);
+            saveProvider(provider);
+            onSave('', selectedModel, provider);
             onClose();
             return;
         }
@@ -103,9 +137,15 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
             return;
         }
 
-        saveApiKey(key);
+        // Lưu key theo provider
+        if (provider === 'agent-platform') {
+            saveAgentPlatformApiKey(key);
+        } else {
+            saveApiKey(key);
+        }
         saveSelectedModel(selectedModel);
-        onSave(key, selectedModel);
+        saveProvider(provider);
+        onSave(key, selectedModel, provider);
         onClose();
     };
 
@@ -136,40 +176,73 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
 
                 {/* Content */}
                 <div className="p-6 space-y-6">
-                    {/* API Key Section */}
+                    {/* ═══ PROVIDER SELECTION ═══ */}
                     <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-3">
-                            Google Gemini API Key
+                            Chọn dịch vụ AI
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => handleProviderChange('gemini')}
+                                className={`p-3 rounded-xl border-2 text-left transition-all ${provider === 'gemini'
+                                    ? 'border-blue-500 bg-blue-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                    }`}
+                            >
+                                <div className="font-semibold text-sm text-gray-800">🌐 Gemini API</div>
+                                <p className="text-xs text-gray-500 mt-1">Miễn phí, key từ AI Studio</p>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleProviderChange('agent-platform')}
+                                className={`p-3 rounded-xl border-2 text-left transition-all ${provider === 'agent-platform'
+                                    ? 'border-purple-500 bg-purple-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                    }`}
+                            >
+                                <div className="font-semibold text-sm text-gray-800">🤖 Agent Platform</div>
+                                <p className="text-xs text-gray-500 mt-1">Google Cloud, doanh nghiệp</p>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* ═══ API KEY SECTION ═══ */}
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            {provider === 'agent-platform' ? 'Agent Platform API Key' : 'Google Gemini API Key'}
                         </label>
 
-                        {/* Tab chuyển đổi */}
-                        <div className="flex rounded-lg bg-gray-100 p-1 mb-4">
-                            {hasEnvKeys && (
+                        {/* Tab env/manual (chỉ hiện cho Gemini) */}
+                        {provider === 'gemini' && (
+                            <div className="flex rounded-lg bg-gray-100 p-1 mb-4">
+                                {hasEnvKeys && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setInputMode('env'); setError(''); }}
+                                        className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${inputMode === 'env'
+                                            ? 'bg-white text-blue-600 shadow-sm'
+                                            : 'text-gray-500 hover:text-gray-700'
+                                            }`}
+                                    >
+                                        🔑 Dùng Key hệ thống
+                                    </button>
+                                )}
                                 <button
                                     type="button"
-                                    onClick={() => { setInputMode('env'); setError(''); }}
-                                    className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${inputMode === 'env'
+                                    onClick={handleSwitchToManual}
+                                    className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${inputMode === 'manual'
                                         ? 'bg-white text-blue-600 shadow-sm'
                                         : 'text-gray-500 hover:text-gray-700'
                                         }`}
                                 >
-                                    🔑 Dùng Key hệ thống
+                                    ✏️ Nhập Key riêng
                                 </button>
-                            )}
-                            <button
-                                type="button"
-                                onClick={handleSwitchToManual}
-                                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${inputMode === 'manual'
-                                    ? 'bg-white text-blue-600 shadow-sm'
-                                    : 'text-gray-500 hover:text-gray-700'
-                                    }`}
-                            >
-                                ✏️ Nhập Key riêng
-                            </button>
-                        </div>
+                            </div>
+                        )}
 
                         {/* Env Keys Mode */}
-                        {inputMode === 'env' && hasEnvKeys && (
+                        {inputMode === 'env' && hasEnvKeys && provider === 'gemini' && (
                             <div className="bg-green-50 border border-green-200 rounded-xl p-4">
                                 <div className="flex items-center gap-2 text-green-700 mb-2">
                                     <Check size={18} />
@@ -192,7 +265,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
                         )}
 
                         {/* Manual API Key Input */}
-                        {inputMode === 'manual' && (
+                        {(inputMode === 'manual' || provider === 'agent-platform') && (
                             <div className="relative">
                                 <input
                                     type={showKey ? 'text' : 'password'}
@@ -218,11 +291,11 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
                         )}
                     </div>
 
-                    {/* Model Selection */}
+                    {/* ═══ MODEL SELECTION ═══ */}
                     <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-3">Chọn Model AI</label>
                         <div className="space-y-2">
-                            {(inputMode === 'manual' ? PAID_MODELS : FREE_MODELS).map((model) => (
+                            {modelList.map((model) => (
                                 <label
                                     key={model.id}
                                     className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${selectedModel === model.id
@@ -263,31 +336,53 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave, isRe
                     <div className="bg-gray-50 rounded-xl p-4 space-y-3">
                         <p className="text-sm font-medium text-gray-700">Hướng dẫn lấy API Key:</p>
                         <div className="space-y-2">
-                            <a
-                                href="https://aistudio.google.com/apikey"
-                                target="_blank"
-                                rel="noreferrer"
-                                className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm"
-                            >
-                                <ExternalLink size={14} />
-                                Lấy API Key miễn phí tại Google AI Studio
-                            </a>
-                            <a
-                                href="https://drive.google.com/drive/folders/1G6eiVeeeEvsYgNk2Om7FEybWf30EP1HN?usp=drive_link"
-                                target="_blank"
-                                rel="noreferrer"
-                                className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm"
-                            >
-                                <ExternalLink size={14} />
-                                Xem hướng dẫn chi tiết (Video)
-                            </a>
+                            {provider === 'gemini' ? (
+                                <>
+                                    <a
+                                        href="https://aistudio.google.com/apikey"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm"
+                                    >
+                                        <ExternalLink size={14} />
+                                        Lấy API Key miễn phí tại Google AI Studio
+                                    </a>
+                                    <a
+                                        href="https://drive.google.com/drive/folders/1G6eiVeeeEvsYgNk2Om7FEybWf30EP1HN?usp=drive_link"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm"
+                                    >
+                                        <ExternalLink size={14} />
+                                        Xem hướng dẫn chi tiết (Video)
+                                    </a>
+                                </>
+                            ) : (
+                                <>
+                                    <a
+                                        href="https://console.cloud.google.com/apis/credentials"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="flex items-center gap-2 text-purple-600 hover:text-purple-700 text-sm"
+                                    >
+                                        <ExternalLink size={14} />
+                                        Tạo API Key tại Google Cloud Console
+                                    </a>
+                                    <p className="text-xs text-gray-500">
+                                        Cần bật Agent Platform API và kích hoạt billing trong dự án Google Cloud.
+                                    </p>
+                                </>
+                            )}
                         </div>
                     </div>
 
                     {/* Save Button */}
                     <button
                         onClick={handleSave}
-                        className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors"
+                        className={`w-full py-3 font-bold rounded-xl transition-colors ${provider === 'agent-platform'
+                            ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                            : 'bg-blue-600 hover:bg-blue-700 text-white'
+                            }`}
                     >
                         Lưu cấu hình
                     </button>

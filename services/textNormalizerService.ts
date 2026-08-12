@@ -4,15 +4,14 @@
  * Tham khảo từ: loi chinh ta.txt và chinhvanban-main/services/textProcessor.ts
  */
 
-import { GoogleGenAI } from "@google/genai";
-import { getSelectedModel, isInvalidKeyError } from './apiKeyService';
+import { getSelectedModel, isInvalidKeyError, createGoogleAiClient, getModelsToTry as getServiceModelsToTry } from './apiKeyService';
 
 // Fallback models theo thứ tự ưu tiên
 const FALLBACK_MODELS = [
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
     'gemini-2.5-flash',
-    'gemini-3-flash-preview',
-    'gemini-2.5-flash-lite',
-    'gemini-2.5-pro',
 ];
 
 // ==================== TYPES ====================
@@ -288,7 +287,7 @@ export const getAICorrectionDecisions = async (
     apiKey: string
 ): Promise<CorrectionDecision[]> => {
 
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = createGoogleAiClient();
 
     const prompt = `Bạn là chuyên gia sửa lỗi chính tả tiếng Việt cho văn bản Sáng kiến Kinh nghiệm (SKKN) giáo dục.
 
