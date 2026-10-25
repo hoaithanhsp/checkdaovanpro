@@ -499,9 +499,9 @@ export const injectFixedContentToDocx = async (
         return injectFixesToDocx(originalFile, replacements);
     }
 
-    // Fallback: Nếu không có changes, thay thế toàn bộ body với fixedContent
-    console.log('⚠️ Không có changes, sử dụng fallback thay thế body');
-    return fallbackReplaceBody(originalFile, fixedContent);
+    // Không được xóa toàn bộ body vì sẽ làm mất bảng, hình, công thức và style.
+    // Khi không có mapping thay thế cụ thể, từ chối xuất để bảo toàn file gốc.
+    throw new Error('Không thể xuất file giữ nguyên định dạng: thiếu danh sách đoạn thay thế cụ thể. Vui lòng dùng tính năng sửa có đánh dấu thay đổi.');
 };
 
 /**

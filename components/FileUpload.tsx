@@ -19,24 +19,20 @@ const FileUpload: React.FC<FileUploadProps> = ({ onTextExtracted, onError, onDoc
         setIsProcessing(true);
         setUploadedFile(null);
 
-        // Lưu ArrayBuffer gốc nếu là file Word (cho XML Injection)
-        if (file.name.toLowerCase().endsWith('.docx') && onDocxLoaded) {
-            try {
-                const arrayBuffer = await file.arrayBuffer();
-                onDocxLoaded({
-                    arrayBuffer,
-                    fileName: file.name
-                });
-            } catch (error) {
-                console.warn('Không thể đọc ArrayBuffer:', error);
-            }
-        }
-
         const result: FileReadResult = await extractTextFromFile(file);
 
         setIsProcessing(false);
 
         if (result.success) {
+            // Chỉ giữ ArrayBuffer sau khi file đã vượt qua kiểm tra định dạng/kích thước.
+            if (file.name.toLowerCase().endsWith('.docx') && onDocxLoaded) {
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    onDocxLoaded({ arrayBuffer, fileName: file.name });
+                } catch (error) {
+                    console.warn('Không thể đọc ArrayBuffer:', error);
+                }
+            }
             setUploadedFile({
                 name: result.fileName || file.name,
                 pageCount: result.pageCount

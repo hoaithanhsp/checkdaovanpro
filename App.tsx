@@ -38,6 +38,9 @@ const App: React.FC = () => {
   const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(false);
   const [progress, setProgress] = useState(0);
   const currentInputRef = useRef<SKKNInput | null>(null);
+  const analysisRequestIdRef = useRef(0);
+  const analysisTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Kiểm tra đăng nhập và API key khi load
   useEffect(() => {
@@ -148,14 +151,25 @@ const App: React.FC = () => {
     setHasApiKey(hasAnyKey());
   };
 
+  useEffect(() => {
+    return () => {
+      analysisRequestIdRef.current += 1;
+      if (analysisTimerRef.current) clearTimeout(analysisTimerRef.current);
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    };
+  }, []);
+
   const handleSubmit = async (data: SKKNInput) => {
+    const requestId = ++analysisRequestIdRef.current;
+    if (analysisTimerRef.current) clearTimeout(analysisTimerRef.current);
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
     setStatus(AnalysisStatus.LOADING);
     setErrorMsg(null);
     setProgress(0);
     currentInputRef.current = data;
 
-    // Simulate progress bar since AI generation takes time
-    const progressInterval = setInterval(() => {
+    // Đây là tiến độ ước tính của một request AI duy nhất, không phải bước đối chiếu đạo văn.
+    progressIntervalRef.current = setInterval(() => {
       setProgress((prev) => {
         if (prev < 40) return prev + Math.floor(Math.random() * 5) + 3; // 0-40%: fast
         if (prev < 70) return prev + Math.floor(Math.random() * 3) + 2; // 40-70%: medium 
@@ -167,18 +181,22 @@ const App: React.FC = () => {
 
     try {
       const analysis = await analyzeSKKNWithGemini(data);
-      clearInterval(progressInterval);
+      if (requestId !== analysisRequestIdRef.current) return;
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
       setProgress(100);
 
-      // Small delay so user can see 100%
-      setTimeout(() => {
+      analysisTimerRef.current = setTimeout(() => {
+        if (requestId !== analysisRequestIdRef.current) return;
         setResult(analysis);
         setStatus(AnalysisStatus.SUCCESS);
-        // Tự động lưu vào lịch sử
         saveToHistory(data, analysis);
+        analysisTimerRef.current = null;
       }, 500);
     } catch (error: any) {
-      clearInterval(progressInterval);
+      if (requestId !== analysisRequestIdRef.current) return;
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
       console.error(error);
       setStatus(AnalysisStatus.ERROR);
       setErrorMsg(error.message || "Đã xảy ra lỗi trong quá trình phân tích. Vui lòng kiểm tra API Key hoặc thử lại sau.");
@@ -186,6 +204,11 @@ const App: React.FC = () => {
   };
 
   const handleReset = () => {
+    analysisRequestIdRef.current += 1;
+    if (analysisTimerRef.current) clearTimeout(analysisTimerRef.current);
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    analysisTimerRef.current = null;
+    progressIntervalRef.current = null;
     setStatus(AnalysisStatus.IDLE);
     setResult(null);
     setErrorMsg(null);
@@ -479,7 +502,7 @@ const App: React.FC = () => {
               {/* Description */}
               <p className="text-lg md:text-xl text-gray-600 dark:text-gray-300 mb-4 leading-relaxed">
                 Công cụ <span className="font-bold text-blue-600">AI</span> hỗ trợ
-                <span className="font-semibold text-red-500"> kiểm tra đạo văn</span>,
+                <span className="font-semibold text-red-500"> phát hiện dấu hiệu trùng lặp</span>,
                 <span className="font-semibold text-green-600"> soát lỗi chính tả</span> và
                 <span className="font-semibold text-purple-600"> tư vấn chiến lược</span>.
               </p>
@@ -499,7 +522,7 @@ const App: React.FC = () => {
 
               {/* Security notice */}
               <p className="text-xs md:text-sm font-medium text-emerald-700 dark:text-emerald-400 mt-1 leading-relaxed max-w-2xl">
-                APP ĐẢM BẢO BẢO MẬT NỘI DUNG SKKN CỦA THẦY CÔ, CHỈ LƯU CỤC BỘ TRÊN MÁY THẦY CÔ, KHÔNG CÓ HỆ THỐNG LƯU TRỮ NÀO KHÁC, THẦY CÔ HOÀN TOÀN YÊN TÂM!
+                APP KHÔNG thay thế công cụ kiểm tra đạo văn hoặc hệ thống lưu trữ chuyên dụng. Nội dung được gửi tới nhà cung cấp AI đã chọn để phân tích; API key và lịch sử được lưu cục bộ trên trình duyệt. Không dùng máy chung nếu tài liệu chứa thông tin nhạy cảm và hãy xóa dữ liệu sau khi sử dụng.
               </p>
             </div>
 
@@ -543,7 +566,7 @@ const App: React.FC = () => {
               </div>
             </div>
             <h3 className="text-2xl font-bold text-gray-800 animate-pulse">Đang thẩm định SKKN...</h3>
-            <p className="text-gray-500 mt-2 max-w-md text-center">Hệ thống đang đối chiếu với cơ sở dữ liệu, kiểm tra lỗi ngữ pháp và tính toán điểm số sáng tạo.</p>
+              <p className="text-gray-500 mt-2 max-w-md text-center">Hệ thống đang phân tích nội dung bằng AI. Các dấu hiệu trùng lặp và điểm số chỉ mang tính tham khảo, không thay thế công cụ đối chiếu nguồn độc lập.</p>
 
             {/* Progress Bar Container */}
             <div className="w-full max-w-md mt-8">
@@ -561,9 +584,9 @@ const App: React.FC = () => {
               </div>
               <p className="text-xs text-center text-gray-400 mt-3 italic">
                 {progress < 30 && "Đang đọc nội dung và phân tích cấu trúc..."}
-                {progress >= 30 && progress < 60 && "Đang đối chiếu dữ liệu đạo văn..."}
-                {progress >= 60 && progress < 90 && "Đang đánh giá tiêu chí khoa học & tính mới..."}
-                {progress >= 90 && "Đang tổng hợp điểm số và hoàn thiện báo cáo..."}
+                {progress >= 30 && progress < 60 && "Đang xử lý nội dung bằng AI..."}
+                {progress >= 60 && progress < 90 && "Đang tổng hợp các tiêu chí thẩm định..."}
+                {progress >= 90 && "Đang hoàn thiện báo cáo..."}
               </p>
               <p className="text-xs text-center text-blue-400 mt-2">
                 Model: <span className="font-semibold">{getSelectedModel()}</span>

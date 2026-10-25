@@ -1,4 +1,4 @@
-import { Type, Schema } from "@google/genai";
+import { Type, Schema, ThinkingLevel } from "@google/genai";
 import { SKKNInput, AnalysisResult, TitleAnalysisResult, AIRiskDetails, ImprovementAnalysisResult, AutoImprovementFixResult, DetectedIssue, AIReductionResult, QuickAIDetectionResult } from "../types";
 import { getHistory } from './historyService';
 import {
@@ -371,7 +371,7 @@ interface FallbackCallConfig {
   responseSchema?: Schema;
   temperature?: number;
   maxOutputTokens?: number;
-  thinkingConfig?: { thinkingLevel: string };
+  thinkingConfig?: { thinkingLevel: ThinkingLevel };
 }
 
 const callWithFallback = async <T>(

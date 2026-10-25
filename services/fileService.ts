@@ -6,8 +6,30 @@ import * as mammoth from 'mammoth';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Cấu hình PDF.js worker - sử dụng CDN với phiên bản cố định
-// Sử dụng unpkg.com thay vì cdnjs vì có độ tin cậy cao hơn
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+
+const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024;
+const MAX_PDF_PAGES = 60;
+const MAX_EXTRACTED_CHARACTERS = 200_000;
+
+const validateFileHeader = async (file: File): Promise<string | null> => {
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+        return 'File vượt quá giới hạn 15 MB. Vui lòng giảm dung lượng hoặc tách tài liệu trước khi tải lên.';
+    }
+
+    const header = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+    const isZip = header[0] === 0x50 && header[1] === 0x4b;
+    const isPdf = new TextDecoder().decode(header).startsWith('%PDF-');
+    const fileName = file.name.toLowerCase();
+
+    if (fileName.endsWith('.docx') && !isZip) {
+        return 'File .docx không có cấu trúc ZIP hợp lệ hoặc đã bị hỏng.';
+    }
+    if (fileName.endsWith('.pdf') && !isPdf) {
+        return 'File .pdf không có chữ ký PDF hợp lệ hoặc đã bị hỏng.';
+    }
+    return null;
+};
 
 export interface FileReadResult {
     success: boolean;
@@ -22,22 +44,28 @@ export interface FileReadResult {
  */
 export const extractTextFromDocx = async (file: File): Promise<FileReadResult> => {
     try {
+        const validationError = await validateFileHeader(file);
+        if (validationError) return { success: false, content: '', error: validationError };
         const arrayBuffer = await file.arrayBuffer();
         const result = await mammoth.extractRawText({ arrayBuffer });
+        const content = result.value.trim();
 
-        if (result.value.trim().length === 0) {
+        if (content.length === 0) {
             return {
                 success: false,
                 content: '',
                 error: 'File Word không có nội dung văn bản hoặc chỉ chứa hình ảnh.'
             };
         }
+        if (content.length > MAX_EXTRACTED_CHARACTERS) {
+            return {
+                success: false,
+                content: '',
+                error: 'Nội dung sau khi trích xuất vượt quá 200.000 ký tự. Vui lòng tách tài liệu thành các phần nhỏ hơn.'
+            };
+        }
 
-        return {
-            success: true,
-            content: result.value,
-            fileName: file.name
-        };
+        return { success: true, content, fileName: file.name };
     } catch (error: any) {
         console.error('Error reading DOCX:', error);
         return {
@@ -53,11 +81,21 @@ export const extractTextFromDocx = async (file: File): Promise<FileReadResult> =
  */
 export const extractTextFromPdf = async (file: File): Promise<FileReadResult> => {
     try {
+        const validationError = await validateFileHeader(file);
+        if (validationError) return { success: false, content: '', error: validationError };
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
         let fullText = '';
         const pageCount = pdf.numPages;
+        if (pageCount > MAX_PDF_PAGES) {
+            return {
+                success: false,
+                content: '',
+                pageCount,
+                error: `File PDF có ${pageCount} trang, vượt giới hạn ${MAX_PDF_PAGES} trang. Vui lòng tách tài liệu.`
+            };
+        }
 
         for (let i = 1; i <= pageCount; i++) {
             const page = await pdf.getPage(i);
@@ -66,6 +104,14 @@ export const extractTextFromPdf = async (file: File): Promise<FileReadResult> =>
                 .map((item: any) => item.str)
                 .join(' ');
             fullText += pageText + '\n\n';
+            if (fullText.length > MAX_EXTRACTED_CHARACTERS) {
+                return {
+                    success: false,
+                    content: '',
+                    pageCount,
+                    error: 'Nội dung sau khi trích xuất vượt quá 200.000 ký tự. Vui lòng tách tài liệu thành các phần nhỏ hơn.'
+                };
+            }
         }
 
         if (fullText.trim().length === 0) {

@@ -4,7 +4,7 @@
  * Tham khảo từ: loi chinh ta.txt và chinhvanban-main/services/textProcessor.ts
  */
 
-import { getSelectedModel, isInvalidKeyError, createGoogleAiClient, getModelsToTry as getServiceModelsToTry } from './apiKeyService';
+import { getSelectedModel, isInvalidKeyError, createGoogleAiClient, getProvider } from './apiKeyService';
 
 // Fallback models theo thứ tự ưu tiên
 const FALLBACK_MODELS = [
@@ -113,7 +113,7 @@ export const extractSKKNContext = (fullText: string): SKKNContext => {
 
     // Trích xuất từ khóa (các từ viết hoa xuất hiện nhiều lần)
     const wordFreq = new Map<string, number>();
-    const words = fullText.match(/\b[A-ZÀ-Ỹ][a-zà-ỹ]{2,}\b/g) || [];
+    const words: string[] = fullText.match(/\b[A-ZÀ-Ỹ][a-zà-ỹ]{2,}\b/g) || [];
 
     words.forEach(word => {
         if (word.length > 3 && !WHITELIST_ACRONYMS.has(word.toUpperCase())) {
@@ -287,7 +287,7 @@ export const getAICorrectionDecisions = async (
     apiKey: string
 ): Promise<CorrectionDecision[]> => {
 
-    const ai = createGoogleAiClient();
+    const ai = createGoogleAiClient(apiKey, getProvider());
 
     const prompt = `Bạn là chuyên gia sửa lỗi chính tả tiếng Việt cho văn bản Sáng kiến Kinh nghiệm (SKKN) giáo dục.
 

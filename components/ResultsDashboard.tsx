@@ -540,7 +540,7 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
             <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
               <AlertOctagon size={20} /> Nguy cơ đạo văn: {result.plagiarismRisk}
             </h3>
-            <p className="text-sm opacity-90">Phát hiện {plagiarismSegments.length} đoạn văn bản có nguy cơ cao.</p>
+            <p className="text-sm opacity-90">Phát hiện {plagiarismSegments.length} đoạn có dấu hiệu trùng lặp theo phân tích ngôn ngữ. Đây không phải kết quả đối chiếu với cơ sở dữ liệu đạo văn.</p>
           </div>
 
           {/* Plagiarism Segments with Rewrite */}
@@ -556,10 +556,10 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result, input, onRe
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                       <div className="flex flex-wrap gap-2">
                         <span className="px-2 py-1 bg-red-100 text-red-700 rounded">
-                          Tương đồng: {seg.similarity}%
+                          Dấu hiệu trùng lặp do AI ước lượng — không phải % đối chiếu thật
                         </span>
                         <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded">
-                          Nguồn: {seg.source}
+                          Nguồn cần tự kiểm chứng: {seg.source}
                         </span>
                       </div>
                       <button

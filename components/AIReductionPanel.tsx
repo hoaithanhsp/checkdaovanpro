@@ -35,19 +35,11 @@ const AIReductionPanel: React.FC<AIReductionPanelProps> = ({
                 (step) => setProgressStep(step)
             );
 
-            // Kiểm tra fixedContent có đủ dài
             const cleanFixed = res.fixedContent.replace(/<red>/g, '').replace(/<\/red>/g, '');
-            const ratio = cleanFixed.length / originalContent.length;
+            const ratio = originalContent.length === 0 ? 1 : cleanFixed.length / originalContent.length;
+            // Không tự nối phần bị thiếu: indexOf() có thể chọn nhầm câu lặp.
             if (ratio < 0.8 && originalContent.length > 5000) {
-                console.warn(`⚠️ fixedContent chỉ có ${Math.round(ratio * 100)}% so với bản gốc`);
-                const lastChunk = cleanFixed.substring(cleanFixed.length - 100).trim();
-                const lastChunkIdx = originalContent.indexOf(lastChunk.substring(0, 50));
-                if (lastChunkIdx > 0) {
-                    const appendFromIdx = lastChunkIdx + lastChunk.length;
-                    if (appendFromIdx < originalContent.length) {
-                        res.fixedContent += '\n' + originalContent.substring(appendFromIdx);
-                    }
-                }
+                throw new Error('Kết quả biên tập bị thiếu đáng kể so với bản gốc. Đã dừng để tránh làm mất nội dung; vui lòng thử lại hoặc sửa thủ công.');
             }
 
             setResult(res);
