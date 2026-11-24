@@ -4,15 +4,8 @@
  * Tham khảo từ: loi chinh ta.txt và chinhvanban-main/services/textProcessor.ts
  */
 
-import { getSelectedModel, isInvalidKeyError, createGoogleAiClient, getProvider } from './apiKeyService';
-
-// Fallback models theo thứ tự ưu tiên
-const FALLBACK_MODELS = [
-    'gemini-3.6-flash',
-    'gemini-3.5-flash',
-    'gemini-3.5-flash-lite',
-    'gemini-2.5-flash',
-];
+import { ThinkingLevel } from '@google/genai';
+import { callWithFallback } from './geminiService';
 
 // ==================== TYPES ====================
 
@@ -284,10 +277,8 @@ export const normalizeVietnameseText = (text: string): string => {
 export const getAICorrectionDecisions = async (
     words: string[],
     context: SKKNContext,
-    apiKey: string
+    _apiKey?: string
 ): Promise<CorrectionDecision[]> => {
-
-    const ai = createGoogleAiClient(apiKey, getProvider());
 
     const prompt = `Bạn là chuyên gia sửa lỗi chính tả tiếng Việt cho văn bản Sáng kiến Kinh nghiệm (SKKN) giáo dục.
 
@@ -330,39 +321,22 @@ Trả về mảng JSON, mỗi phần tử có cấu trúc:
 **CHỈ TRẢ VỀ JSON, KHÔNG GIẢI THÍCH THÊM.**`;
 
     try {
-        const selectedModel = getSelectedModel();
-        const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
-        let lastError: Error | null = null;
-
-        for (const model of modelsToTry) {
-            try {
-                console.log(`[TextNormalizer] Đang thử model: ${model}`);
-                const response = await ai.models.generateContent({
-                    model,
-                    contents: prompt
-                });
-
-                const responseText = response.text || '';
-
-                // Parse JSON từ response
+        const { result } = await callWithFallback<CorrectionDecision[]>(
+            'TextNormalizer',
+            prompt,
+            {
+                responseMimeType: 'application/json',
+                thinkingLevel: ThinkingLevel.LOW,
+            },
+            (responseText) => {
                 const jsonMatch = responseText.match(/\[[\s\S]*\]/);
                 if (!jsonMatch) {
                     throw new Error('AI không trả về JSON hợp lệ');
                 }
-
-                const decisions: CorrectionDecision[] = JSON.parse(jsonMatch[0]);
-                return decisions;
-            } catch (error: any) {
-                console.warn(`[TextNormalizer] Model ${model} thất bại:`, error.message);
-                lastError = error;
-                if (isInvalidKeyError(error)) {
-                    break;
-                }
-                // Tiếp tục thử model khác
+                return JSON.parse(jsonMatch[0]) as CorrectionDecision[];
             }
-        }
-
-        throw lastError || new Error('Tất cả các model đều thất bại');
+        );
+        return result;
     } catch (error) {
         console.error('❌ Lỗi khi gọi AI:', error);
 

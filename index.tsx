@@ -3,13 +3,17 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { ThemeProvider } from './contexts/ThemeContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import { LEGACY_GEMINI_MODEL_STORAGE_KEYS } from './services/apiKeyService';
 
-// Dọn dẹp model cũ không hợp lệ trong localStorage
-const INVALID_MODELS = ['gemini-2.0-flash', 'gemini-3-pro-preview', 'gemini-2.5-flash-preview-05-20'];
-const savedModel = localStorage.getItem('skkn-gemini-model');
-if (savedModel && INVALID_MODELS.includes(savedModel)) {
-  localStorage.removeItem('skkn-gemini-model');
-  console.log(`🔄 Đã xóa model cũ không hợp lệ: ${savedModel}`);
+// Tự động di trú (Migration): dọn sạch các khóa model cũ để trình duyệt tự nhận mặc định gemini-4-hydrogen (v4)
+try {
+  for (const legacyKey of LEGACY_GEMINI_MODEL_STORAGE_KEYS) {
+    if (localStorage.getItem(legacyKey) !== null) {
+      localStorage.removeItem(legacyKey);
+    }
+  }
+} catch {
+  // Bỏ qua nếu trình duyệt chặn localStorage
 }
 
 const rootElement = document.getElementById('root');

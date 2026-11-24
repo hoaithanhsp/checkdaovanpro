@@ -2,22 +2,21 @@ import { Type, Schema, ThinkingLevel } from "@google/genai";
 import { SKKNInput, AnalysisResult, TitleAnalysisResult, AIRiskDetails, ImprovementAnalysisResult, AutoImprovementFixResult, DetectedIssue, AIReductionResult, QuickAIDetectionResult } from "../types";
 import { getHistory } from './historyService';
 import {
-  hasAnyKey,
-  isQuotaOrRateLimitError,
-  isModelOverloadedError,
-  isModelNotFoundError,
+  apiKeyManager,
+  createGeminiConfig,
+  classifyApiError,
   getVietnameseErrorMessage,
-  getSelectedModel,
   getActiveApiKeyForProvider,
-  getNextApiKey,
-  markKeyExhausted,
   incrementDailyRequestCount,
   createGoogleAiClient,
+  createServerProxyAiClient,
   getProvider,
   getOrderedModels,
   canFallbackToNextModel,
-  shouldRotateApiKey,
-  parseApiError,
+  maskGoogleAiApiKey,
+  checkServerProxyAvailable,
+  getServerProxyStatus,
+  setFallbackNotice,
 } from './apiKeyService';
 
 // ======================================================================
@@ -333,116 +332,266 @@ const RESPONSE_SCHEMA: Schema = {
   required: ["duplicateLevel", "duplicateDetails", "spellingErrors", "plagiarismRisk", "plagiarismSegments", "scores", "scoreDetails", "developmentPlan", "overallConclusion", "structure", "qualityCriteria", "aiRiskScore", "aiRiskLevel", "aiRiskDetails"],
 };
 
-// ═══════════ CENTRALIZED FALLBACK (api.md §II) ═══════════
+// ═══════════ CENTRALIZED 2-TIER FALLBACK (api.md v5.0 §II + §IV) ═══════════
 
-// Helper để lấy API key hiện tại
-const getApiKeyOrThrow = (): string => {
-  if (!hasAnyKey()) {
-    throw new Error('Vui lòng cấu hình API Key trước khi sử dụng tính năng này.');
+const MAX_AUTO_WAIT_RPM_MS = 35_000;
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const stripJsonCodeFences = (raw: string): string => {
+  const trimmed = (raw || '').trim();
+  if (trimmed.startsWith('```')) {
+    return trimmed.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
   }
-  const key = getActiveApiKeyForProvider();
-  if (!key) {
-    throw new Error('Tất cả API Key đã hết quota. Vui lòng chờ vài phút hoặc nhập key mới.');
-  }
-  return key;
+  return trimmed;
 };
 
 const getModelsToTry = (): string[] => {
   return getOrderedModels();
 };
 
-const throwGeminiError = (error: any, fallbackMessage: string): never => {
-  if (error && (shouldRotateApiKey(error) || isModelOverloadedError(error))) {
-    throw new Error(getVietnameseErrorMessage(error));
-  }
-  throw error || new Error(fallbackMessage);
-};
-
 /**
- * Hàm fallback tập trung — mọi generateContent ĐỀU đi qua đây (api.md §II).
- * - Thử model chọn trước, sau đó chuỗi fallback.
- * - Chuyển model khi: 500, 503, 504, NOT_FOUND, overloaded, Agent Platform 403.
- * - Dừng khi: 401, 429, 400, lỗi không xác định.
- * - Xoay key Gemini khi hết quota.
+ * Hàm fallback tập trung — MỌI generateContent ĐỀU đi qua đây (api.md v5.0 §II).
+ * - Tầng 1: Xoay vòng tất cả API key khả dụng trong kho trên CÙNG model (giữ chất lượng cao nhất).
+ * - Tầng 2: Nếu hết key trên model đó, tự chuyển sang model Free Tier kế tiếp (6 model có hạn mức riêng).
+ * - Tầng 3: Fallback sang Server Proxy (/api/gemini) nếu server đã cấu hình GEMINI_API_KEYS.
+ * - Tầng 4: Nếu tất cả key chạm giới hạn RPM ngắn (<= 35s), tự chờ ngắn 1 lần rồi thử lại.
+ * - Tự động loại bỏ temperature/topP/topK trên Gemini 4 & Gemini 3, xử lý thinkingLevel an toàn.
  */
-interface FallbackCallConfig {
+export interface FallbackCallConfig {
   systemInstruction?: string;
   responseMimeType?: string;
   responseSchema?: Schema;
   temperature?: number;
   maxOutputTokens?: number;
+  thinkingLevel?: ThinkingLevel;
   thinkingConfig?: { thinkingLevel: ThinkingLevel };
 }
 
-const callWithFallback = async <T>(
+export const callWithFallback = async <T>(
   tag: string,
   prompt: string,
   config: FallbackCallConfig,
   parseResponse: (text: string) => T,
 ): Promise<{ result: T; usedModel: string }> => {
-  const modelsToTry = getModelsToTry();
   const provider = getProvider();
-  let lastError: Error | null = null;
-  let apiKey = getApiKeyOrThrow();
+  const modelsToTry = getOrderedModels(undefined, provider);
+  const requestedThinkingLevel =
+    config.thinkingLevel ?? config.thinkingConfig?.thinkingLevel ?? ThinkingLevel.MEDIUM;
 
-  while (apiKey) {
-    const ai = createGoogleAiClient(apiKey, provider);
+  const invokeModel = async (ai: ReturnType<typeof createGoogleAiClient>, model: string) => {
+    const buildConfig = (omitThinkingConfig = false) =>
+      createGeminiConfig({
+        provider,
+        model,
+        systemInstruction: config.systemInstruction,
+        responseMimeType: config.responseMimeType,
+        responseSchema: config.responseSchema,
+        maxOutputTokens: config.maxOutputTokens,
+        thinkingLevel: requestedThinkingLevel,
+        temperature: config.temperature,
+        omitThinkingConfig,
+      });
 
-    for (const model of modelsToTry) {
-      try {
-        console.log(`[${tag}] Provider: ${provider} | Key ...${apiKey.slice(-6)} | Model: ${model}`);
-        const response = await ai.models.generateContent({
+    try {
+      return await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: buildConfig(false),
+      });
+    } catch (err: any) {
+      if (classifyApiError(err).isThinkingConfigError) {
+        console.warn(`[${tag}] Model ${model} không nhận thinkingConfig, tự gửi lại không kèm thinkingConfig...`);
+        return await ai.models.generateContent({
           model,
           contents: prompt,
-          config: {
-            ...(config.systemInstruction ? { systemInstruction: config.systemInstruction } : {}),
-            ...(config.responseMimeType ? { responseMimeType: config.responseMimeType } : {}),
-            ...(config.responseSchema ? { responseSchema: config.responseSchema } : {}),
-            ...(config.temperature !== undefined ? { temperature: config.temperature } : {}),
-            ...(config.maxOutputTokens ? { maxOutputTokens: config.maxOutputTokens } : {}),
-            ...(config.thinkingConfig ? { thinkingConfig: config.thinkingConfig } : {}),
-          },
+          config: buildConfig(true),
         });
+      }
+      throw err;
+    }
+  };
 
-        if (response.text) {
-          incrementDailyRequestCount();
-          return { result: parseResponse(response.text), usedModel: model };
-        } else {
-          throw new Error('Empty response from AI');
-        }
-      } catch (error: any) {
-        console.warn(`[${tag}] Model ${model} thất bại:`, error.message);
-        lastError = error;
+  const extractAndParse = (response: any, model: string): { result: T; usedModel: string } => {
+    const rawText = response?.text;
+    if (!rawText) throw new Error('Empty response from AI');
+    const preparedText =
+      config.responseMimeType === 'application/json' ? stripJsonCodeFences(rawText) : rawText;
+    const parsed = parseResponse(preparedText);
+    incrementDailyRequestCount();
+    return { result: parsed, usedModel: model };
+  };
 
-        // Lỗi cho phép chuyển model → tiếp tục
-        if (canFallbackToNextModel(error)) {
-          console.log(`[${tag}] ↳ Chuyển model dự phòng (${parseApiError(error)})`);
-          continue;
-        }
+  // Nhánh 1: Agent Platform API (tách biệt hoàn toàn, 1 key riêng, fallback qua AGENT_PLATFORM_FALLBACK_MODELS)
+  if (provider === 'agent-platform') {
+    const apiKey = getActiveApiKeyForProvider();
+    if (!apiKey) {
+      throw new Error('Vui lòng cấu hình Agent Platform API Key trong Cài đặt trước khi sử dụng.');
+    }
+    const ai = createGoogleAiClient(apiKey, 'agent-platform');
+    let lastError: any = null;
 
-        // Lỗi quota → xoay key (chỉ Gemini)
-        if (shouldRotateApiKey(error)) {
-          markKeyExhausted(apiKey);
-          const nextKey = getNextApiKey();
-          if (nextKey) {
-            apiKey = nextKey;
-            break; // Break model loop, retry với key mới
+    try {
+      for (let i = 0; i < modelsToTry.length; i++) {
+        const model = modelsToTry[i];
+        try {
+          console.log(`[${tag}] Provider: agent-platform | Key ${maskGoogleAiApiKey(apiKey)} | Model: ${model}`);
+          const response = await invokeModel(ai, model);
+          setFallbackNotice(null);
+          return extractAndParse(response, model);
+        } catch (error: any) {
+          console.warn(`[${tag}] (agent-platform) Model ${model} thất bại:`, error?.message || error);
+          lastError = error;
+          if (!canFallbackToNextModel(error, 'agent-platform')) {
+            break;
           }
-          throw new Error(getVietnameseErrorMessage(error));
+          if (i < modelsToTry.length - 1) {
+            const nextModel = modelsToTry[i + 1];
+            setFallbackNotice(`Đang tự động chuyển từ ${model} sang ${nextModel} (do ${model} đang bận)...`);
+          }
         }
+      }
+    } finally {
+      setFallbackNotice(null);
+    }
 
-        // Lỗi khác (401, 400, unknown) → dừng ngay
-        throw new Error(getVietnameseErrorMessage(error));
+    throw new Error(getVietnameseErrorMessage(lastError));
+  }
+
+  // Nhánh 2: Gemini API — 2 tầng (Multi-Key × 6 Free Tier Models + Server Proxy + Short RPM Wait)
+  if (!getServerProxyStatus().checked && apiKeyManager.getAllKeys().length === 0) {
+    await checkServerProxyAvailable();
+  }
+  const proxyStatus = getServerProxyStatus();
+  const hasAnyPoolKey = apiKeyManager.getAllKeys().length > 0;
+  if (!hasAnyPoolKey && !proxyStatus.available) {
+    throw new Error('Vui lòng cấu hình ít nhất 1 Gemini API Key trong Cài đặt trước khi sử dụng tính năng này.');
+  }
+
+  let lastError: any = null;
+  let hasWaitedShortRpm = false;
+
+  const runPass = async (): Promise<{ done: boolean; value?: { result: T; usedModel: string }; lastErr?: any }> => {
+    let passLastError: any = null;
+
+    for (let mIdx = 0; mIdx < modelsToTry.length; mIdx++) {
+      const model = modelsToTry[mIdx];
+      const candidateKeys = apiKeyManager.getAvailableKeysForModel(model);
+      let modelFailedDueToServer = false;
+
+      // Tầng 1: Thử lần lượt tất cả key khả dụng trên CÙNG model (giữ chất lượng cao nhất)
+      for (let kIdx = 0; kIdx < candidateKeys.length; kIdx++) {
+        const apiKey = candidateKeys[kIdx];
+        const ai = createGoogleAiClient(apiKey, 'gemini');
+        try {
+          console.log(`[${tag}] Provider: gemini | Key ${maskGoogleAiApiKey(apiKey)} | Model: ${model}`);
+          const response = await invokeModel(ai, model);
+          setFallbackNotice(null);
+          return { done: true, value: extractAndParse(response, model) };
+        } catch (error: any) {
+          passLastError = error;
+          const classified = classifyApiError(error);
+          console.warn(
+            `[${tag}] (gemini) Model ${model} | Key ${maskGoogleAiApiKey(apiKey)} thất bại (${classified.type}):`,
+            error?.message || error
+          );
+
+          if (classified.type === 'QUOTA_EXCEEDED' || classified.type === 'RATE_LIMIT') {
+            apiKeyManager.markKeyModelQuotaError(apiKey, model, classified.type, {
+              isPerMinute: classified.isPerMinute,
+              retryDelaySec: classified.retryDelaySec,
+            });
+            if (kIdx < candidateKeys.length - 1) {
+              setFallbackNotice(
+                `Key ${maskGoogleAiApiKey(apiKey)} tạm hết hạn mức trên ${model} — đang xoay sang key dự phòng #${kIdx + 2}/${candidateKeys.length}...`
+              );
+              continue;
+            }
+            break;
+          }
+
+          if (classified.type === 'INVALID_API_KEY' || classified.type === 'PERMISSION_DENIED') {
+            apiKeyManager.markKeyError(apiKey, classified.type, model);
+            if (kIdx < candidateKeys.length - 1) {
+              setFallbackNotice(`Key ${maskGoogleAiApiKey(apiKey)} bị từ chối — đang xoay sang key dự phòng...`);
+              continue;
+            }
+            break;
+          }
+
+          if (
+            classified.type === 'MODEL_OVERLOADED' ||
+            classified.type === 'TRANSIENT_SERVER_ERROR' ||
+            classified.type === 'MODEL_NOT_FOUND' ||
+            classified.isThinkingConfigError
+          ) {
+            // KHÔNG đánh dấu key lỗi; chuyển luôn sang model dự phòng kế tiếp
+            modelFailedDueToServer = true;
+            break;
+          }
+
+          // Lỗi parse JSON hoặc lỗi 400 payload thật sự → dừng ngay
+          throw error;
+        }
+      }
+
+      // Tầng 3: Fallback sang Server Proxy (/api/gemini) nếu bật
+      if (!modelFailedDueToServer && getServerProxyStatus().available) {
+        try {
+          console.log(`[${tag}] Provider: gemini-proxy | Model: ${model}`);
+          if (hasAnyPoolKey) {
+            setFallbackNotice(`Key cá nhân tạm hết quota trên ${model} — đang dùng kho key dự phòng máy chủ...`);
+          }
+          const proxyAi = createServerProxyAiClient();
+          const response = await invokeModel(proxyAi, model);
+          setFallbackNotice(null);
+          return { done: true, value: extractAndParse(response, model) };
+        } catch (proxyErr: any) {
+          passLastError = proxyErr;
+          const proxyClassified = classifyApiError(proxyErr);
+          console.warn(`[${tag}] (gemini-proxy) Model ${model} thất bại (${proxyClassified.type}):`, proxyErr?.message || proxyErr);
+          if (!canFallbackToNextModel(proxyErr, 'gemini') && proxyClassified.type !== 'INVALID_API_KEY') {
+            throw proxyErr;
+          }
+        }
+      }
+
+      // Tầng 2: Chuyển sang model Free Tier tiếp theo
+      if (mIdx < modelsToTry.length - 1) {
+        const nextModel = modelsToTry[mIdx + 1];
+        setFallbackNotice(
+          `Đang tự động chuyển từ ${model} sang ${nextModel} (mỗi model có hạn mức miễn phí riêng)...`
+        );
       }
     }
 
-    // Nếu vòng model kết thúc mà không break (không có lỗi quota), thoát while
-    if (!lastError || !shouldRotateApiKey(lastError)) {
+    return { done: false, lastErr: passLastError };
+  };
+
+  try {
+    while (true) {
+      const outcome = await runPass();
+      if (outcome.done && outcome.value) return outcome.value;
+      lastError = outcome.lastErr;
+
+      // Tầng 4: Nếu tất cả key/model chạm giới hạn RPM ngắn (<= 35s), tự chờ ngắn 1 lần rồi thử lại
+      const lastType = lastError ? classifyApiError(lastError).type : 'UNKNOWN';
+      if (!hasWaitedShortRpm && (lastType === 'RATE_LIMIT' || lastType === 'QUOTA_EXCEEDED')) {
+        const soonestMs = apiKeyManager.getSoonestCooldownMs(modelsToTry[0]);
+        if (soonestMs !== null && soonestMs > 0 && soonestMs <= MAX_AUTO_WAIT_RPM_MS) {
+          hasWaitedShortRpm = true;
+          const waitSec = Math.ceil(soonestMs / 1000);
+          setFallbackNotice(`Tất cả key đang nghỉ giới hạn tốc độ (RPM) — tự động thử lại sau ${waitSec} giây...`);
+          await delay(soonestMs + 500);
+          continue;
+        }
+      }
       break;
     }
+  } finally {
+    setFallbackNotice(null);
   }
 
-  throwGeminiError(lastError, 'Tất cả các model đều thất bại. Vui lòng thử lại sau.');
+  throw new Error(getVietnameseErrorMessage(lastError));
 };
 
 export const analyzeSKKNWithGemini = async (input: SKKNInput): Promise<AnalysisResult> => {
@@ -644,7 +793,7 @@ Trả về JSON array với format:
   const { result } = await callWithFallback<ReferenceItem[]>(
     'References',
     prompt,
-    { responseMimeType: 'application/json' },
+    { responseMimeType: 'application/json', thinkingLevel: ThinkingLevel.LOW },
     (text) => JSON.parse(text),
   );
   return result;
